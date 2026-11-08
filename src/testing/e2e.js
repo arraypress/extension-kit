@@ -27,6 +27,13 @@ import path from 'node:path';
  */
 
 /**
+ * What `launchExtension` takes: Playwright's persistent-context options, a
+ * name prefix for the temporary profile, and more Chromium switches.
+ *
+ * @typedef {NonNullable<Parameters<BrowserType['launchPersistentContext']>[1]> & {prefix?: string}} LaunchOptions
+ */
+
+/**
  * Poll `fn` until it returns something truthy.
  *
  * @template T
@@ -52,9 +59,8 @@ export async function until(fn, what, timeout = 5000) {
  *
  * @param {BrowserType} chromium - Playwright's `chromium`.
  * @param {string} dir - The unpacked extension.
- * @param {object} [options] - Context options (`locale`, `viewport`, …) plus:
- * @param {string} [options.prefix] - The temporary profile's name prefix.
- * @param {string[]} [options.args] - More Chromium switches.
+ * @param {LaunchOptions} [options] - Playwright's context options (`locale`, `viewport`, …), plus
+ *   `prefix` (the temporary profile's name prefix) and `args` (more Chromium switches).
  * @returns {Promise<LaunchedExtension>} The running extension.
  * @example
  * const { context, worker, url, close } = await launchExtension(chromium, 'extension');

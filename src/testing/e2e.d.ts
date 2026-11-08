@@ -30,6 +30,9 @@ export type LaunchedExtension = {
      */
     close: () => Promise<void>;
 };
+export type LaunchOptions = NonNullable<Parameters<BrowserType['launchPersistentContext']>[1]> & {
+    prefix?: string;
+};
 /** @import { BrowserContext, BrowserType, CDPSession, Page, Worker } from 'playwright' */
 /**
  * A launched extension.
@@ -40,6 +43,12 @@ export type LaunchedExtension = {
  * @property {string} extensionId Its id, the host of its pages.
  * @property {(page?: string) => string} url `chrome-extension://<id>/<page>`.
  * @property {() => Promise<void>} close Close the browser and delete its profile.
+ */
+/**
+ * What `launchExtension` takes: Playwright's persistent-context options, a
+ * name prefix for the temporary profile, and more Chromium switches.
+ *
+ * @typedef {NonNullable<Parameters<BrowserType['launchPersistentContext']>[1]> & {prefix?: string}} LaunchOptions
  */
 /**
  * Poll `fn` until it returns something truthy.
@@ -58,19 +67,15 @@ export declare function until<T>(fn: () => T | Promise<T>, what: string, timeout
  *
  * @param {BrowserType} chromium - Playwright's `chromium`.
  * @param {string} dir - The unpacked extension.
- * @param {object} [options] - Context options (`locale`, `viewport`, …) plus:
- * @param {string} [options.prefix] - The temporary profile's name prefix.
- * @param {string[]} [options.args] - More Chromium switches.
+ * @param {LaunchOptions} [options] - Playwright's context options (`locale`, `viewport`, …), plus
+ *   `prefix` (the temporary profile's name prefix) and `args` (more Chromium switches).
  * @returns {Promise<LaunchedExtension>} The running extension.
  * @example
  * const { context, worker, url, close } = await launchExtension(chromium, 'extension');
  * const page = await context.newPage();
  * await page.goto(url('options/options.html'));
  */
-export declare function launchExtension(chromium: BrowserType, dir: string, { prefix, args, ...options }?: {
-    prefix?: string;
-    args?: string[];
-}): Promise<LaunchedExtension>;
+export declare function launchExtension(chromium: BrowserType, dir: string, { prefix, args, ...options }?: LaunchOptions): Promise<LaunchedExtension>;
 /**
  * Emulate colour schemes in the offscreen document: one CDP session attached
  * to it, reused for every change.
