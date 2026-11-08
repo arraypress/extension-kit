@@ -99,9 +99,16 @@ async function readJson(file, fallback) {
 export async function findDisallowedClones({ runJscpd, cwd = process.cwd() }) {
   const out = await mkdtemp(path.join(tmpdir(), 'jscpd-'));
   try {
-    const run = runJscpd(['--reporters', 'json', '--output', out, '--silent', '--exit-code', '0'], { cwd, encoding: 'utf8' });
+    // Absolute paths, made relative to the repository below: jscpd otherwise names each file
+    // relative to the scanned folder it's in, so test/a.js and scripts/a.js would look the same.
+    const run = runJscpd(['--reporters', 'json', '--output', out, '--silent', '--exit-code', '0', '--absolute'], { cwd, encoding: 'utf8' });
     if (run.error || run.status !== 0) throw run.error ?? new Error(`jscpd failed: ${run.stderr}`);
+    /** @type {Parameters<typeof clonesFromReport>[0]} */
     const report = await readJson(path.join(out, 'jscpd-report.json'), {});
+    for (const { firstFile, secondFile } of report.duplicates ?? []) {
+      firstFile.name = path.relative(cwd, firstFile.name);
+      secondFile.name = path.relative(cwd, secondFile.name);
+    }
     /** @type {{allow?: AllowEntry[]}} */
     const allowlist = await readJson(path.join(cwd, '.jscpd-allowlist.json'), {});
     const allow = allowlist.allow ?? [];
