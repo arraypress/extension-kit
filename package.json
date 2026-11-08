@@ -1,0 +1,68 @@
+{
+  "name": "@arraypress/extension-kit",
+  "version": "1.0.0",
+  "description": "Shared pieces for Chrome extensions: Chrome's own page styles, a Chrome Sync settings store, the light/dark toolbar glyph, About links, and build and test helpers.",
+  "type": "module",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./build": {
+      "types": "./src/build/index.d.ts",
+      "import": "./src/build/index.js"
+    },
+    "./testing": {
+      "types": "./src/testing/index.d.ts",
+      "import": "./src/testing/index.js"
+    },
+    "./chrome-ui.css": "./src/styles/chrome-ui.css"
+  },
+  "bin": {
+    "extension-kit": "bin/extension-kit.js"
+  },
+  "files": [
+    "src",
+    "bin"
+  ],
+  "scripts": {
+    "test": "npm run lint && npm run typecheck && node --test tests/*.test.js && npm run duplication",
+    "lint": "eslint .",
+    "typecheck": "tsc -p . && node scripts/types.mjs --check",
+    "types": "node scripts/types.mjs",
+    "duplication": "node bin/extension-kit.js duplication"
+  },
+  "keywords": [
+    "chrome-extension",
+    "manifest-v3",
+    "chrome-storage",
+    "chrome-sync",
+    "settings",
+    "dark-mode",
+    "toolbar-icon",
+    "css"
+  ],
+  "author": "David Sherlock",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arraypress/extension-kit.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/chrome": "^0.3.7",
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "jscpd": "^5.4.3",
+    "jsdom": "^31.0.0",
+    "playwright": "^1.64.0",
+    "typescript": "^7.0.2"
+  }
+}

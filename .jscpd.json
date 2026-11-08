@@ -1,0 +1,19 @@
+{
+  "path": [
+    "src",
+    "bin",
+    "scripts",
+    "tests"
+  ],
+  "format": [
+    "javascript",
+    "css"
+  ],
+  "ignore": [
+    "**/*.d.ts",
+    "**/node_modules/**"
+  ],
+  "minTokens": 40,
+  "minLines": 4,
+  "mode": "weak"
+}
