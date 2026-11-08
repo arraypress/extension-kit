@@ -2,7 +2,6 @@
   "path": [
     "src",
     "bin",
-    "scripts",
     "tests"
   ],
   "format": [

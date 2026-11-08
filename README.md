@@ -208,7 +208,7 @@ chrome://bookmarks in Chromium 156 / Chrome 157; the sources are listed at the t
 
 `npm test` runs ESLint, a strict TypeScript check of the JSDoc (`checkJs`), the tests, and the
 copied-code guard. The `.d.ts` files are generated from the JSDoc: `npm run types` writes them, and
-the type check fails while one is stale.
+the type check fails while one is stale (it regenerates them into `.types/` and compares).
 
 ## License
 

@@ -5,6 +5,7 @@
   "type": "module",
   "main": "src/index.js",
   "types": "src/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -30,8 +31,8 @@
   "scripts": {
     "test": "npm run lint && npm run typecheck && node --test tests/*.test.js && npm run duplication",
     "lint": "eslint .",
-    "typecheck": "tsc -p . && node scripts/types.mjs --check",
-    "types": "node scripts/types.mjs",
+    "typecheck": "tsc -p . && tsc -p tsconfig.types.json && diff -r -x '*.js' -x styles .types src && rm -rf .types",
+    "types": "tsc -p tsconfig.types.json && cp -R .types/. src/ && rm -rf .types",
     "duplication": "node bin/extension-kit.js duplication"
   },
   "keywords": [

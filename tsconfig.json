@@ -5,11 +5,23 @@
     "strict": true,
     "noEmit": true,
     "target": "ES2024",
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "types": ["node", "chrome"],
+    "types": [
+      "node",
+      "chrome"
+    ],
     "skipLibCheck": true
   },
-  "include": ["src/**/*.js", "bin/**/*.js", "scripts/**/*.mjs", "tests/**/*.js", "eslint.config.js"]
+  "include": [
+    "src/**/*.js",
+    "bin/**/*.js",
+    "tests/**/*.js",
+    "eslint.config.js"
+  ]
 }
