@@ -5,6 +5,19 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-11-09
+
+### Added
+
+- **Page components** (the browser half, `ui/`): `createMenu` (Chrome's ⋮ action menu on a modal `<dialog class="menu">`: over its button or at a point, kept on screen, closed by a click outside, Esc, Tab or blur, ↑/↓/Home/End, focus returned; `placement: 'below'` as an option) with `menuPosition` and `isInside`; `moreActionsButton` (the ⋮ row button, "More actions for “…”"); `askText` (the one-field dialog: Save off while blank or invalid with the reason under the field, Enter saves, Esc cancels) with `checkText`; `createToast` (the toast with Undo, 10 seconds as chrome://bookmarks) and `TOAST_MS`. From More Tab Actions' and Tabby's copies.
+- **`chrome-ui.css`**: `--icon-more-vert` (cr:more-vert) and `.icon-more-vert`, a ⋮ icon without a sprite.
+- **`/testing`**: `installWarnings`, `warningsAddedBy` and `withoutPermissions` (Chrome's install warnings for a manifest, from More Tab Actions' `alarms` check); `savedTabGroups` (Chrome's saved tab groups from a closed profile, from More Tab Actions' `saved-groups.mjs`); `referencedPath`.
+
+### Fixed
+
+- **`missingReferences`** ignores a `#fragment` or `?query`: `getURL('options.html#workspaces')` is `options.html`, no longer reported missing. Page links with one (`href="help.html#faq"`) are now checked too, where before they were skipped.
+- **`manifestReferences`** takes a typed manifest (no `any`) and reads an `action.default_icon` given as one path.
+
 ## [1.1.0] — 2026-11-09
 
 ### Added

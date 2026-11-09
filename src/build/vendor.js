@@ -19,7 +19,7 @@ import path from 'node:path';
 const SOURCE = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 /** What a vendored copy holds, relative to `src/`: everything an extension page or worker may load. */
-export const RUNTIME_ENTRIES = Object.freeze(['index.js', 'index.d.ts', 'about', 'commands', 'dom', 'settings', 'styles', 'toolbar']);
+export const RUNTIME_ENTRIES = Object.freeze(['index.js', 'index.d.ts', 'about', 'commands', 'dom', 'settings', 'styles', 'toolbar', 'ui']);
 
 /** The kit's stylesheet, an absolute path in the installed package. */
 export const STYLESHEET = path.join(SOURCE, 'styles', 'chrome-ui.css');

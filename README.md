@@ -10,6 +10,8 @@ The pieces ArrayPress's Chrome extensions share, so each is written once:
   service worker shows the matching icon.
 - **About links**: README, Issues and PRIVACY.md in the extension's GitHub repository, plus
   package-time warnings for placeholder links.
+- **Chrome's page components**: the ⋮ action menu and its row button, the one-field dialog
+  ("Rename folder"), and the toast with Undo, built on the stylesheet's classes.
 - **Build and test helpers** (Node): toolbar icon rendering, zipping for the Chrome Web Store, a
   fake `chrome.storage`, Playwright helpers, packaging checks, and a copied-code guard.
 
@@ -132,6 +134,68 @@ At the end of `npm run package`, `printReleaseChecks(ABOUT_LINKS, REPOSITORY)` w
 link is a placeholder (`isPlaceholder`: example.com/.org/.net) and reminds you the repository must
 be public before the store listing goes live.
 
+## Page components
+
+Chrome's own components, made in the page by script (no markup to copy), styled by `chrome-ui.css`.
+Each takes `doc` (default `document`); the wording defaults to Chrome's English and takes a
+translation.
+
+### ⋮ menu (cr-action-menu)
+
+```js
+import { createMenu, moreActionsButton } from '../vendor/extension-kit/index.js';
+
+const menu = createMenu(); // one <dialog class="menu" role="menu"> for the page
+row.append(moreActionsButton(workspace.name, {
+  onClick: (anchor) => menu.open([
+    { label: 'Rename', run: () => rename(workspace) },
+    'separator',
+    { label: 'Delete', run: () => remove(workspace), disabled: locked },
+  ], { anchor }),
+}));
+// A right-click: menu.open(items, { x: event.clientX, y: event.clientY, focusTo: row });
+```
+
+It opens modally over its button, as Chrome's does (its top at the button's top, its end at the
+button's end), moved to stay 8px inside the window. A click outside, Esc, Tab or the window losing
+focus closes it; ↑/↓ (wrapping, past disabled items), Home and End move; focus goes back to the
+button (or `focusTo`); an item runs once the menu has closed. `createMenu({id, placement: 'below'})`
+opens it below the button instead. `menuPosition` and `isInside` are the pure geometry.
+
+`moreActionsButton(name, options)` is the 32px ⋮ icon button, labelled "More actions for “name”"
+(`label` for a translation), with `aria-haspopup="menu"`; its icon is the stylesheet's
+`.icon-more-vert` (`--icon-more-vert`, cr:more-vert), so the page needs no sprite. `className`,
+`tooltip` (a `title`) and `focusable: false` (out of the tab order, for a row that takes the focus)
+cover the rest.
+
+### One-field dialog (cr-dialog)
+
+```js
+const name = await askText({ title: 'Rename workspace', label: 'Name', value: workspace.name, maxLength: 200 });
+const site = await askText({
+  title: 'Add site', label: 'Site', action: 'Add',
+  validate: (text) => (siteFromInput(text) ? null : 'Enter a site, like example.com'),
+});
+```
+
+Resolves to the text, trimmed, or `null` when cancelled. The action button (default "Save") stays
+disabled while the text is blank or `validate` gives a reason, which shows under the field
+(`checkText` is that rule, pure). Enter presses the action button; Esc and Cancel cancel; the
+focus goes back to what had it, or to `returnTo` (an element, or a function asked at the end).
+One `#text-dialog` per page, made on first use.
+
+### Toast with Undo (cr-toast)
+
+```js
+const toast = createToast(); // at load, so screen readers know the live region
+toast.show(`Deleted “${workspace.name}”`, () => restore(workspace));
+toast.show('Copied'); // no Undo
+```
+
+`#toast` (`role="status"`), bottom left. A new message replaces the last and restarts the wait:
+10 seconds, as chrome://bookmarks's (`TOAST_MS`), or `duration` / `undoDuration`. Undo hides it
+and runs once. `undoLabel` translates the button.
+
 ## Build helpers (`@arraypress/extension-kit/build`)
 
 | Export | What it does |
@@ -164,7 +228,10 @@ except those listed, each with a reason:
 | `until(fn, what, timeout?)` | Poll until truthy. |
 | `offscreenEmulator(cdp)` | Emulate light/dark inside the offscreen document. |
 | `recordIconCalls(worker)` | Record `chrome.action.setIcon` calls Chrome accepted. |
-| `filesUnder`, `zipEntries`, `missingReferences`, `manifestReferences` | For a packaging test: the zip is the folder, and every path the extension names resolves. |
+| `installWarnings(worker, manifest)` | Chrome's own install warnings for a manifest (`chrome.management.getPermissionWarningsByManifest`, no permission needed), from a loaded extension's worker. |
+| `warningsAddedBy(worker, manifest, names)` | `{warnings, without, added}`: the warnings with and without some permissions, and those only they bring (`withoutPermissions` is the pure part). |
+| `savedTabGroups(profile)` | Chrome's saved tab groups (`{title, pinned, urls}`) read from a closed profile's `Sync Data/LevelDB`: no extension API lists them. |
+| `filesUnder`, `zipEntries`, `missingReferences`, `manifestReferences` | For a packaging test: the zip is the folder, and every path the extension names resolves (a `#fragment` or `?query` ignored: `referencedPath`). |
 
 ## Stylesheet classes
 
@@ -189,9 +256,10 @@ except those listed, each with a reason:
 | Buttons (cr-button) | plain `<button>`; `.action` filled; `.link` as a link; `.icon-button` 32px round |
 | Settings menu | `.nav` > `ul.nav-list` > `a.nav-item[aria-current="page"]`, `.nav-separator` |
 | Manager layout | `.manager`/`.layout`, `.sidebar` with `.tree` > `.tree-item`, `.main` with `.list-card` |
-| Menu (cr-action-menu) | `<dialog class="menu">` of `button[role="menuitem"]`, `hr` |
-| Dialog (cr-dialog) | `<dialog class="dialog"><form method="dialog">` `.dialog-title`, `.dialog-body`, `.dialog-buttons` |
-| Toast (cr-toast) | `<div class="toast">text <button>Undo</button></div>` |
+| Menu (cr-action-menu) | `<dialog class="menu">` of `button[role="menuitem"]`, `hr` (or `createMenu`) |
+| ⋮ icon | `<span class="icon icon-more-vert" aria-hidden="true">` (or `moreActionsButton`) |
+| Dialog (cr-dialog) | `<dialog class="dialog"><form method="dialog">` `.dialog-title`, `.dialog-body`, `.dialog-buttons` (one field: `askText`) |
+| Toast (cr-toast) | `<div class="toast">text <button>Undo</button></div>` (or `createToast`) |
 | Drawer (cr-drawer) | `<dialog class="drawer">` with `.drawer-head` and a `.nav` |
 | Side panel page | `<body class="side-panel">`: the panel's colours, a column 100vh high |
 | Panel tabs (cr-tabs) | `<div class="tabs" role="tablist">` of `button.tab[role="tab"][aria-selected]` |
@@ -209,7 +277,8 @@ chrome://bookmarks in Chromium 156 / Chrome 157; the sources are listed at the t
 
 ## Development
 
-`npm test` runs ESLint, a strict TypeScript check of the JSDoc (`checkJs`), the tests, and the
+`npm test` runs ESLint, a strict TypeScript check of the JSDoc (`checkJs`), the tests (the menu,
+the dialog and the Chrome readers in Playwright's Chromium, the rest in Node and jsdom), and the
 copied-code guard. The `.d.ts` files are generated from the JSDoc: `npm run types` writes them, and
 the type check fails while one is stale (it regenerates them into `.types/` and compares).
 

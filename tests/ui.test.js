@@ -1,0 +1,157 @@
+/**
+ * The page components' pure parts (where a menu goes, whether a text can be
+ * used) and what runs in jsdom: the toast and the ⋮ button. The menu and the
+ * dialog need a real `<dialog>`, so they're tested in Chromium
+ * (ui-chromium.test.js).
+ *
+ * @module tests/ui
+ */
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
+import { MENU_EDGE, TOAST_MS, checkText, createToast, isInside, menuPosition, moreActionsButton } from '../src/index.js';
+
+const viewport = { width: 800, height: 600 };
+const size = { width: 160, height: 120 };
+/** A 32px ⋮ button with its top-left at (x, y). @param {number} x @param {number} y */
+const button = (x, y) => ({ left: x, top: y, right: x + 32, bottom: y + 32 });
+
+describe('menuPosition', () => {
+  it('over its button, as Chrome’s: top at the button’s top, end at the button’s end', () => {
+    assert.deepEqual(menuPosition(size, viewport, { anchor: button(500, 100) }), { left: 532 - 160, top: 100 });
+  });
+
+  it('moved up to end at the button’s bottom when it would leave the window below', () => {
+    assert.deepEqual(menuPosition(size, viewport, { anchor: button(500, 520) }), { left: 372, top: 552 - 120 });
+  });
+
+  it('moved in from the left edge, and never above the top edge', () => {
+    assert.deepEqual(menuPosition(size, { width: 800, height: 100 }, { anchor: button(10, 30) }), { left: MENU_EDGE, top: MENU_EDGE });
+  });
+
+  it('below its button (placement "below"), or above it when there’s no room', () => {
+    assert.deepEqual(menuPosition(size, viewport, { anchor: button(500, 100), placement: 'below' }), { left: 372, top: 136 });
+    assert.deepEqual(menuPosition(size, viewport, { anchor: button(500, 500), placement: 'below' }), { left: 372, top: 500 - 120 - 4 });
+  });
+
+  it('at a point (a right-click): its top-left there, flipped up and kept in at the edges', () => {
+    assert.deepEqual(menuPosition(size, viewport, { x: 200, y: 150 }), { left: 200, top: 150 });
+    assert.deepEqual(menuPosition(size, viewport, { x: 790, y: 590 }), { left: 800 - 160 - MENU_EDGE, top: 590 - 120 });
+  });
+
+  it('isInside counts the edges as inside', () => {
+    const box = { left: 10, top: 10, right: 20, bottom: 20 };
+    assert.ok(isInside(box, 10, 20));
+    assert.ok(!isInside(box, 9, 15));
+    assert.ok(!isInside(box, 15, 21));
+  });
+});
+
+describe('checkText', () => {
+  it('blank text can’t be used, and has nothing to say', () => {
+    assert.deepEqual(checkText('   '), { ok: false, reason: '' });
+  });
+
+  it('a non-blank text is fine by default, or as the validator says', () => {
+    const site = (/** @type {string} */ text) => (text.includes('.') ? null : 'Enter a site, like example.com');
+    assert.deepEqual(checkText('Research'), { ok: true, reason: '' });
+    assert.deepEqual(checkText('news', site), { ok: false, reason: 'Enter a site, like example.com' });
+    assert.deepEqual(checkText('news.example', site), { ok: true, reason: '' });
+  });
+});
+
+describe('toast', () => {
+  const page = () => new JSDOM('<!doctype html><body></body>').window.document;
+
+  /**
+   * A page with a toast, on mocked timers.
+   *
+   * @param {import('node:test').TestContext} t - The test (for its timers).
+   * @param {import('../src/ui/toast.js').ToastOptions} [options] - The toast's options.
+   */
+  const timed = (t, options = {}) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const doc = page();
+    return { doc, toast: createToast({ doc, ...options }) };
+  };
+
+  it('is a polite live region from the start, hidden until shown', () => {
+    const doc = page();
+    const toast = createToast({ doc });
+    assert.equal(toast.element.outerHTML,
+      '<div id="toast" class="toast" role="status" aria-live="polite" hidden=""><span id="toast-text"></span><button id="toast-undo" type="button" hidden="">Undo</button></div>');
+    assert.equal(doc.body.lastElementChild, toast.element);
+  });
+
+  it('shows the message with Undo; Undo hides it and runs once', (t) => {
+    const { doc, toast } = timed(t);
+    let undone = 0;
+    toast.show('Deleted “Research”', () => { undone++; });
+    const undo = /** @type {HTMLButtonElement} */ (doc.getElementById('toast-undo'));
+    assert.equal(doc.getElementById('toast-text')?.textContent, 'Deleted “Research”');
+    assert.equal(toast.element.hidden, false);
+    assert.equal(undo.hidden, false);
+    undo.click();
+    undo.click();
+    assert.equal(undone, 1);
+    assert.equal(toast.element.hidden, true);
+  });
+
+  it('goes after chrome://bookmarks’s ten seconds; a new message restarts the wait and drops the old Undo', (t) => {
+    const { doc, toast } = timed(t);
+    let undone = false;
+    toast.show('Deleted “Research”', () => { undone = true; });
+    t.mock.timers.tick(TOAST_MS - 1000);
+    toast.show('Copied');
+    assert.equal(/** @type {HTMLElement} */ (doc.getElementById('toast-undo')).hidden, true);
+    t.mock.timers.tick(TOAST_MS - 1);
+    assert.equal(toast.element.hidden, false);
+    t.mock.timers.tick(1);
+    assert.equal(toast.element.hidden, true);
+    /** @type {HTMLElement} */ (doc.getElementById('toast-undo')).click();
+    assert.equal(undone, false);
+  });
+
+  it('takes its own Undo text and times, with and without Undo', (t) => {
+    const { doc, toast } = timed(t, { undoLabel: 'Rückgängig', duration: 4000, undoDuration: 8000 });
+    assert.equal(doc.getElementById('toast-undo')?.textContent, 'Rückgängig');
+    toast.show('Gespeichert');
+    t.mock.timers.tick(4000);
+    assert.equal(toast.element.hidden, true);
+    toast.show('Gelöscht', () => {});
+    t.mock.timers.tick(4000);
+    assert.equal(toast.element.hidden, false);
+    t.mock.timers.tick(4000);
+    assert.equal(toast.element.hidden, true);
+  });
+
+  it('hide() takes it down at once', () => {
+    const doc = page();
+    const toast = createToast({ doc });
+    toast.show('Saved');
+    toast.hide();
+    assert.equal(toast.element.hidden, true);
+  });
+});
+
+describe('moreActionsButton', () => {
+  it('is Chrome’s ⋮ icon button, labelled “More actions for …”, opening its menu', () => {
+    const doc = new JSDOM('<!doctype html><body></body>').window.document;
+    /** @type {HTMLButtonElement[]} */
+    const clicked = [];
+    const more = moreActionsButton('Research', { doc, onClick: (target) => clicked.push(target) });
+    assert.equal(more.outerHTML,
+      '<button type="button" class="icon-button" aria-label="More actions for “Research”" aria-haspopup="menu"><span class="icon icon-more-vert" aria-hidden="true"></span></button>');
+    more.click();
+    assert.deepEqual(clicked, [more]);
+  });
+
+  it('takes a translated label, more classes, a tooltip, and can stay out of the tab order', () => {
+    const doc = new JSDOM('<!doctype html><body></body>').window.document;
+    const more = moreActionsButton('Research', { doc, label: 'Weitere Aktionen für Research', className: 'row-menu', tooltip: true, focusable: false });
+    assert.equal(more.className, 'icon-button row-menu');
+    assert.equal(more.getAttribute('aria-label'), 'Weitere Aktionen für Research');
+    assert.equal(more.title, 'Weitere Aktionen für Research');
+    assert.equal(more.tabIndex, -1);
+  });
+});

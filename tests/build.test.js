@@ -8,7 +8,7 @@ import {
   RUNTIME_ENTRIES, STYLESHEET, clonesFromReport, disallowedClones, placeholderWarning, printReleaseChecks,
   repositoryReminder, shipsFile, toolbarIconFile, vendorKit,
 } from '../src/build/index.js';
-import { filesUnder, missingReferences, zipEntries } from '../src/testing/index.js';
+import { filesUnder, missingReferences, referencedPath, zipEntries } from '../src/testing/index.js';
 
 /**
  * Run `fn` with a fresh temporary folder, removed afterwards.
@@ -124,6 +124,23 @@ describe('packaging', () => {
       'root → icons/gone.png',
       'root → offscreen.html',
     ]);
+  }));
+
+  it('missingReferences reads a #fragment or ?query as the file before it, still finding a missing one', () => inTemp(async (dir) => {
+    await writeTree(dir, {
+      'manifest.json': JSON.stringify({ background: { service_worker: 'background.js?v=2' }, action: { default_icon: 'icon.png' } }),
+      'background.js': "import './shared/a.js?fresh';\nchrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#workspaces') });\nchrome.runtime.getURL('gone.html#top');",
+      'shared/a.js': '',
+      'icon.png': 'png',
+      'options/options.html': '<a href="#top">Top</a><a href="options.html?section=about">About</a><a href="help.html#faq">Help</a><img src="data:image/png;base64,AA">',
+    });
+    assert.deepEqual(await missingReferences(dir), [
+      'root → gone.html#top',
+      'options → help.html#faq',
+    ]);
+    assert.equal(referencedPath('options.html#workspaces'), 'options.html');
+    assert.equal(referencedPath('a.js?v=2#x'), 'a.js');
+    assert.equal(referencedPath('#top'), '');
   }));
 
   it('names toolbar icon files by scheme and size', () => {

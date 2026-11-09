@@ -1,7 +1,8 @@
 /**
  * The kit's browser half: what an extension's pages, offscreen document and
- * service worker load. Every function takes the `chrome` APIs it uses as
- * arguments, so tests run the real logic against fakes.
+ * service worker load, Chrome's page components (the ⋮ menu, the one-field
+ * dialog, the toast with Undo) included. Every function takes the `chrome`
+ * APIs it uses as arguments, so tests run the real logic against fakes.
  *
  * Build-time helpers are in `@arraypress/extension-kit/build`, test helpers
  * in `@arraypress/extension-kit/testing`, and the stylesheet is
@@ -22,3 +23,17 @@ export { DARK_QUERY, TOOLBAR_DARK_KEY, TOOLBAR_SCHEME, reportColorScheme, scheme
 export {
   OFFSCREEN_PATH, TOOLBAR_ICON_DIR, createToolbarTheme, startToolbarTheme, toolbarIcon, watchFromOffscreen,
 } from './toolbar/theme.js';
+export { MENU_EDGE, createMenu, isInside, menuPosition, moreActionsButton } from './ui/menu.js';
+export { askText, checkText } from './ui/text-dialog.js';
+export { TOAST_MS, createToast } from './ui/toast.js';
+
+/**
+ * The page helpers' types, for a page's JSDoc.
+ *
+ * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
+ * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry
+ * @typedef {import('./ui/menu.js').MenuItem} MenuItem
+ * @typedef {import('./ui/menu.js').MenuPlace} MenuPlace
+ * @typedef {import('./ui/text-dialog.js').TextRequest} TextRequest
+ * @typedef {import('./ui/toast.js').Toast} Toast
+ */
