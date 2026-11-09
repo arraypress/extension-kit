@@ -157,7 +157,10 @@ except those listed, each with a reason:
 | Export | What it does |
 |---|---|
 | `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`: JSON copies, `onChanged` for real changes only, sync's 8,192-byte item quota and 120 writes a minute. `settled()` waits for listeners. |
-| `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), close()}`. |
+| `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
+| `extensionProfile(chromium, dir, options)` | A profile to start the browser on more than once (a restart, a first start with a changed manifest): `{dir, launch(), remove()}`. |
+| `checkRunner()` | Named checks that report and go on: `check(name, fn)`, `fail(name)` for an error found outside a check, `finish()`. |
+| `serve(routes, {port})` | Serve test pages on 127.0.0.1 from a table, a `Map` or a function of the path; `{origin, port, server, close()}`. |
 | `until(fn, what, timeout?)` | Poll until truthy. |
 | `offscreenEmulator(cdp)` | Emulate light/dark inside the offscreen document. |
 | `recordIconCalls(worker)` | Record `chrome.action.setIcon` calls Chrome accepted. |

@@ -26,9 +26,27 @@ export type LaunchedExtension = {
      */
     url: (page?: string) => string;
     /**
-     * Close the browser and delete its profile.
+     * The profile's folder (Chrome writes `DevToolsActivePort` there, for one).
+     */
+    profile: string;
+    /**
+     * Close the browser; from {@link launchExtension}, delete its profile too.
      */
     close: () => Promise<void>;
+};
+export type ExtensionProfile = {
+    /**
+     * The profile's folder.
+     */
+    dir: string;
+    /**
+     * Start the browser on it; its `close()` keeps the profile.
+     */
+    launch: () => Promise<LaunchedExtension>;
+    /**
+     * Delete the profile (close every launch first).
+     */
+    remove: () => Promise<void>;
 };
 export type LaunchOptions = NonNullable<Parameters<BrowserType['launchPersistentContext']>[1]> & {
     prefix?: string;
@@ -42,7 +60,17 @@ export type LaunchOptions = NonNullable<Parameters<BrowserType['launchPersistent
  * @property {Worker} worker Its service worker.
  * @property {string} extensionId Its id, the host of its pages.
  * @property {(page?: string) => string} url `chrome-extension://<id>/<page>`.
- * @property {() => Promise<void>} close Close the browser and delete its profile.
+ * @property {string} profile The profile's folder (Chrome writes `DevToolsActivePort` there, for one).
+ * @property {() => Promise<void>} close Close the browser; from {@link launchExtension}, delete its profile too.
+ */
+/**
+ * A profile that outlives one browser start, for checks that something
+ * survives a restart (or that need a first start with a changed manifest).
+ *
+ * @typedef {object} ExtensionProfile
+ * @property {string} dir The profile's folder.
+ * @property {() => Promise<LaunchedExtension>} launch Start the browser on it; its `close()` keeps the profile.
+ * @property {() => Promise<void>} remove Delete the profile (close every launch first).
  */
 /**
  * What `launchExtension` takes: Playwright's persistent-context options, a
@@ -57,10 +85,31 @@ export type LaunchOptions = NonNullable<Parameters<BrowserType['launchPersistent
  * @param {() => T | Promise<T>} fn - The check.
  * @param {string} what - What's awaited, for the timeout's message.
  * @param {number} [timeout] - Give up after this many ms. Default 5000.
- * @returns {Promise<NonNullable<T>>} The first truthy value.
+ * @returns {Promise<Exclude<T, false | 0 | 0n | '' | null | undefined>>} The first truthy value
+ *   (typed without the falsy ones, so `until(() => ready && text, …)` is a string).
  * @throws {Error} "Timed out waiting for <what>".
  */
-export declare function until<T>(fn: () => T | Promise<T>, what: string, timeout?: number): Promise<NonNullable<T>>;
+export declare function until<T>(fn: () => T | Promise<T>, what: string, timeout?: number): Promise<Exclude<T, false | 0 | 0n | '' | null | undefined>>;
+/**
+ * A fresh profile for the unpacked extension at `dir`, to start the browser
+ * on as often as a test needs: each start loads the extension and waits for
+ * its service worker.
+ *
+ * @param {BrowserType} chromium - Playwright's `chromium`.
+ * @param {string} dir - The unpacked extension.
+ * @param {LaunchOptions} [options] - Playwright's context options (`locale`, `viewport`, …), plus
+ *   `prefix` (the temporary profile's name prefix) and `args` (more Chromium switches).
+ * @returns {Promise<ExtensionProfile>} The profile.
+ * @example
+ * const profile = await extensionProfile(chromium, 'extension');
+ * const first = await profile.launch();
+ * await first.worker.evaluate(() => chrome.storage.local.set({seen: true}));
+ * await first.close();
+ * const { worker, close } = await profile.launch(); // the same storage, read as on any day
+ * await close();
+ * await profile.remove();
+ */
+export declare function extensionProfile(chromium: BrowserType, dir: string, { prefix, args, ...options }?: LaunchOptions): Promise<ExtensionProfile>;
 /**
  * Load the unpacked extension at `dir` into a fresh profile and wait for its
  * service worker.
@@ -69,13 +118,13 @@ export declare function until<T>(fn: () => T | Promise<T>, what: string, timeout
  * @param {string} dir - The unpacked extension.
  * @param {LaunchOptions} [options] - Playwright's context options (`locale`, `viewport`, …), plus
  *   `prefix` (the temporary profile's name prefix) and `args` (more Chromium switches).
- * @returns {Promise<LaunchedExtension>} The running extension.
+ * @returns {Promise<LaunchedExtension>} The running extension; `close()` deletes the profile too.
  * @example
  * const { context, worker, url, close } = await launchExtension(chromium, 'extension');
  * const page = await context.newPage();
  * await page.goto(url('options/options.html'));
  */
-export declare function launchExtension(chromium: BrowserType, dir: string, { prefix, args, ...options }?: LaunchOptions): Promise<LaunchedExtension>;
+export declare function launchExtension(chromium: BrowserType, dir: string, options?: LaunchOptions): Promise<LaunchedExtension>;
 /**
  * Emulate colour schemes in the offscreen document: one CDP session attached
  * to it, reused for every change.
@@ -100,6 +149,11 @@ export type CheckRunner = {
      */
     check: (name: string, fn: () => unknown) => Promise<boolean>;
     /**
+     * Count a failure found outside any check (a page's
+     * uncaught error, say): printed now, listed and counted at the end.
+     */
+    fail: (name: string) => void;
+    /**
      * Print the tally, and exit with 1 if anything failed.
      */
     finish: () => void;
@@ -110,6 +164,8 @@ export type CheckRunner = {
  *
  * @typedef {object} CheckRunner
  * @property {(name: string, fn: () => unknown) => Promise<boolean>} check Run one check; resolves to whether it passed.
+ * @property {(name: string) => void} fail Count a failure found outside any check (a page's
+ *   uncaught error, say): printed now, listed and counted at the end.
  * @property {() => void} finish Print the tally, and exit with 1 if anything failed.
  */
 /**
@@ -118,7 +174,8 @@ export type CheckRunner = {
  *
  * @returns {CheckRunner} The runner.
  * @example
- * const { check, finish } = checkRunner();
+ * const { check, fail, finish } = checkRunner();
+ * page.on('pageerror', (error) => fail(`page error: ${error.message}`));
  * await check('the menu opens', async () => { … });
  * finish();
  */

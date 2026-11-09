@@ -23,7 +23,18 @@ import path from 'node:path';
  * @property {Worker} worker Its service worker.
  * @property {string} extensionId Its id, the host of its pages.
  * @property {(page?: string) => string} url `chrome-extension://<id>/<page>`.
- * @property {() => Promise<void>} close Close the browser and delete its profile.
+ * @property {string} profile The profile's folder (Chrome writes `DevToolsActivePort` there, for one).
+ * @property {() => Promise<void>} close Close the browser; from {@link launchExtension}, delete its profile too.
+ */
+
+/**
+ * A profile that outlives one browser start, for checks that something
+ * survives a restart (or that need a first start with a changed manifest).
+ *
+ * @typedef {object} ExtensionProfile
+ * @property {string} dir The profile's folder.
+ * @property {() => Promise<LaunchedExtension>} launch Start the browser on it; its `close()` keeps the profile.
+ * @property {() => Promise<void>} remove Delete the profile (close every launch first).
  */
 
 /**
@@ -40,17 +51,63 @@ import path from 'node:path';
  * @param {() => T | Promise<T>} fn - The check.
  * @param {string} what - What's awaited, for the timeout's message.
  * @param {number} [timeout] - Give up after this many ms. Default 5000.
- * @returns {Promise<NonNullable<T>>} The first truthy value.
+ * @returns {Promise<Exclude<T, false | 0 | 0n | '' | null | undefined>>} The first truthy value
+ *   (typed without the falsy ones, so `until(() => ready && text, …)` is a string).
  * @throws {Error} "Timed out waiting for <what>".
  */
 export async function until(fn, what, timeout = 5000) {
   const end = Date.now() + timeout;
   for (;;) {
     const value = await fn();
-    if (value) return /** @type {NonNullable<T>} */ (value);
+    if (value) return /** @type {Exclude<T, false | 0 | 0n | '' | null | undefined>} */ (value);
     if (Date.now() > end) throw new Error(`Timed out waiting for ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
+}
+
+/**
+ * A fresh profile for the unpacked extension at `dir`, to start the browser
+ * on as often as a test needs: each start loads the extension and waits for
+ * its service worker.
+ *
+ * @param {BrowserType} chromium - Playwright's `chromium`.
+ * @param {string} dir - The unpacked extension.
+ * @param {LaunchOptions} [options] - Playwright's context options (`locale`, `viewport`, …), plus
+ *   `prefix` (the temporary profile's name prefix) and `args` (more Chromium switches).
+ * @returns {Promise<ExtensionProfile>} The profile.
+ * @example
+ * const profile = await extensionProfile(chromium, 'extension');
+ * const first = await profile.launch();
+ * await first.worker.evaluate(() => chrome.storage.local.set({seen: true}));
+ * await first.close();
+ * const { worker, close } = await profile.launch(); // the same storage, read as on any day
+ * await close();
+ * await profile.remove();
+ */
+export async function extensionProfile(chromium, dir, { prefix = 'extension-', args = [], ...options } = {}) {
+  const tmp = await mkdtemp(path.join(tmpdir(), prefix));
+  const profile = path.join(tmp, 'profile');
+  return {
+    dir: profile,
+    async launch() {
+      const context = await chromium.launchPersistentContext(profile, {
+        channel: 'chromium',
+        ...options,
+        args: [`--disable-extensions-except=${dir}`, `--load-extension=${dir}`, ...args],
+      });
+      const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+      const extensionId = new URL(worker.url()).host;
+      return {
+        context,
+        worker,
+        extensionId,
+        profile,
+        url: (page = '') => `chrome-extension://${extensionId}/${page}`,
+        close: () => context.close(),
+      };
+    },
+    remove: () => rm(tmp, { recursive: true, force: true }),
+  };
 }
 
 /**
@@ -61,29 +118,20 @@ export async function until(fn, what, timeout = 5000) {
  * @param {string} dir - The unpacked extension.
  * @param {LaunchOptions} [options] - Playwright's context options (`locale`, `viewport`, …), plus
  *   `prefix` (the temporary profile's name prefix) and `args` (more Chromium switches).
- * @returns {Promise<LaunchedExtension>} The running extension.
+ * @returns {Promise<LaunchedExtension>} The running extension; `close()` deletes the profile too.
  * @example
  * const { context, worker, url, close } = await launchExtension(chromium, 'extension');
  * const page = await context.newPage();
  * await page.goto(url('options/options.html'));
  */
-export async function launchExtension(chromium, dir, { prefix = 'extension-', args = [], ...options } = {}) {
-  const tmp = await mkdtemp(path.join(tmpdir(), prefix));
-  const context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-    channel: 'chromium',
-    ...options,
-    args: [`--disable-extensions-except=${dir}`, `--load-extension=${dir}`, ...args],
-  });
-  const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
-  const extensionId = new URL(worker.url()).host;
+export async function launchExtension(chromium, dir, options = {}) {
+  const profile = await extensionProfile(chromium, dir, options);
+  const launched = await profile.launch();
   return {
-    context,
-    worker,
-    extensionId,
-    url: (page = '') => `chrome-extension://${extensionId}/${page}`,
+    ...launched,
     async close() {
-      await context.close();
-      await rm(tmp, { recursive: true, force: true });
+      await launched.close();
+      await profile.remove();
     },
   };
 }
@@ -139,6 +187,8 @@ export async function recordIconCalls(worker) {
  *
  * @typedef {object} CheckRunner
  * @property {(name: string, fn: () => unknown) => Promise<boolean>} check Run one check; resolves to whether it passed.
+ * @property {(name: string) => void} fail Count a failure found outside any check (a page's
+ *   uncaught error, say): printed now, listed and counted at the end.
  * @property {() => void} finish Print the tally, and exit with 1 if anything failed.
  */
 
@@ -148,7 +198,8 @@ export async function recordIconCalls(worker) {
  *
  * @returns {CheckRunner} The runner.
  * @example
- * const { check, finish } = checkRunner();
+ * const { check, fail, finish } = checkRunner();
+ * page.on('pageerror', (error) => fail(`page error: ${error.message}`));
  * await check('the menu opens', async () => { … });
  * finish();
  */
@@ -168,6 +219,10 @@ export function checkRunner() {
         console.log(`  ✗ ${name}\n    ${String(/** @type {Error} */ (error)?.message ?? error).split('\n').join('\n    ')}`);
         return false;
       }
+    },
+    fail(name) {
+      failures.push(name);
+      console.log(`  ✗ ${name}`);
     },
     finish() {
       console.log(`\n${passed} passed, ${failures.length} failed`);
