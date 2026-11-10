@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`contentScriptSync(scripting, id, want)`** (`scripting/`, in the runtime half): keeps one registered content script in line with what may run (registered, updated or unregistered), changes one after another so quick setting and permission changes can't race. Replaces the same queue-and-register code in Upright, Clean Links and Bannerless; first used by Better Prices.
+- **`eachLimited`** in the runtime half (`time/pool.js`, from the main entry), so an extension page can fetch a few files at a time (Better Saves); `/testing` still exports it.
 - **Live checkers** (`/testing`): `parseLiveOptions` (the command line), `parseProxy` and `exitPoint` (where the traffic leaves from), from Bannerless's `test/live/lib/`, for Better Prices' live check of real shops.
 
 ## [1.5.0] — 2026-11-10

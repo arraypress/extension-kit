@@ -1,8 +1,9 @@
 /**
- * Working through a list a few at a time: a live check of many sites, each
- * in one of a few browsers.
+ * Working through a list a few at a time: files fetched by an extension page,
+ * or a live check of many sites, each in one of a few browsers. Runs
+ * anywhere (worker, page, Node).
  *
- * @module testing/pool
+ * @module time/pool
  */
 
 /**

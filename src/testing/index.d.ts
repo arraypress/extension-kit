@@ -10,7 +10,7 @@ export { TEST_BUILDS_ENV, testBuildDir } from '../build/test-build.js';
 export { chromeUserAgent, closeOnSignal, realisticBrowser } from './browser.js';
 export { CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, until, } from './e2e.js';
 export { exitPoint, parseLiveOptions, parseProxy } from './live.js';
-export { eachLimited } from './pool.js';
+export { eachLimited } from '../time/pool.js';
 export { serve } from './server.js';
 export { SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';
