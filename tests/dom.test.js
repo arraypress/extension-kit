@@ -87,6 +87,34 @@ describe('localize', () => {
   it('translator substitutes', () => {
     assert.equal(translator(i18n)('hint', ['R']), 'Press R');
   });
+
+  /**
+   * `chrome.i18n` as Chrome reads `_locales`: a message's `$NAME$` placeholder has content `$1`,
+   * filled from the substitutions (empty without them).
+   *
+   * @param {Record<string, string>} messages - Each message, its placeholder already `$1`.
+   */
+  const chromeI18n = (messages) => ({
+    /** @param {string} key @param {string | string[]} [subs] */
+    getMessage: (key, subs) => messages[key]?.replace('$1', [subs ?? ''].flat()[0]) ?? '',
+    getUILanguage: () => 'en',
+  });
+
+  it('fills the extension’s name (extShortName) into a message that names it, in markup and script', () => {
+    const named = chromeI18n({ extShortName: 'Upright', about: 'About $1', hint: 'Press $1', title: 'Settings' });
+    const { document } = new JSDOM('<h2 data-i18n="about"></h2><a data-i18n-aria-label="about"></a><h1 data-i18n="title"></h1>').window;
+    localize(document, named);
+    assert.equal(document.querySelector('h2')?.textContent, 'About Upright');
+    assert.equal(document.querySelector('a')?.getAttribute('aria-label'), 'About Upright');
+    assert.equal(document.querySelector('h1')?.textContent, 'Settings', 'a message without a placeholder is left as it is');
+    const t = translator(named);
+    assert.equal(t('about'), 'About Upright');
+    assert.equal(t('hint', ['R']), 'Press R', 'substitutions given win');
+  });
+
+  it('an extension without extShortName gets nothing filled in', () => {
+    assert.equal(translator(chromeI18n({ about: 'About $1' }))('about'), 'About ');
+  });
 });
 
 describe('setUpPage', () => {
@@ -120,6 +148,13 @@ describe('setUpPage', () => {
     assert.equal(t('heading'), 'Appearance');
     await until(() => sent.length, 'the scheme report', 1000);
     assert.deepEqual(sent, [{ type: TOOLBAR_SCHEME, dark: true }]);
+  });
+
+  it('a title that names the extension gets its name without substitutions', () => {
+    const { document, api, media } = setup(false);
+    api.i18n = { ...i18n, getMessage: (key, subs) => (key === 'extShortName' ? 'Bannerless' : i18n.getMessage(key, subs)) };
+    setUpPage(api, { title: 'optionsTitle', doc: document, media });
+    assert.equal(document.title, 'Bannerless settings');
   });
 
   it('leaves the title alone without one, and only logs a scheme report that fails', async (t) => {

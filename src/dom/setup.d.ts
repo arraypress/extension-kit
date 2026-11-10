@@ -13,7 +13,7 @@ export type PageSetup = {
      */
     title?: string;
     /**
-     * The title's placeholders (the extension's name).
+     * The title's placeholders. Default: the extension's name (`translator`).
      */
     substitutions?: string | string[];
     /**
@@ -32,7 +32,7 @@ export type PageSetup = {
  *
  * @typedef {object} PageSetup
  * @property {string} [title] The title's message (“optionsTitle”). Default: the title is left as it is.
- * @property {string | string[]} [substitutions] The title's placeholders (the extension's name).
+ * @property {string | string[]} [substitutions] The title's placeholders. Default: the extension's name (`translator`).
  * @property {Document} [doc] The page. Default `document`.
  * @property {SchemeMedia} [media] The scheme to report. Default the page's `matchMedia(DARK_QUERY)`.
  */
@@ -45,7 +45,8 @@ export type PageSetup = {
  * @returns {(key: string, substitutions?: string | string[]) => string} The page's message lookup
  *   (`translator(chrome.i18n)`).
  * @example
- * const t = setUpPage(chrome, { title: 'optionsTitle', substitutions: [t('extShortName')] });
+ * const t = setUpPage(chrome, { title: 'optionsTitle' }); // "$NAME$ settings": 'Upright settings'
+ * t('optionsGetHelp');                                     // "Get help with $NAME$": 'Get help with Upright'
  * // The popup, whose title Chrome doesn't show:
  * const t = setUpPage(chrome);
  */

@@ -159,12 +159,24 @@ be public before the store listing goes live.
 ## Page start-up
 
 ```js
-const t = setUpPage(chrome, { title: 'optionsTitle', substitutions: [name] });
+const t = setUpPage(chrome, { title: 'optionsTitle' });
 ```
 
 Reports the page's colour scheme for the toolbar glyph (`watchColorScheme`; a failure is only
 logged), fills its `data-i18n` text (`localize`), sets its title from a message, and returns the
 page's `t`.
+
+The extension's name lives in one message, `extShortName`. A message that names the extension
+takes it as a placeholder whose content is `$1`, and every lookup without substitutions (`t(key)`,
+`data-i18n`, `data-i18n-*`, the title) fills it in:
+
+```json
+"optionsAbout": { "message": "About $NAME$", "placeholders": { "name": { "content": "$1" } } }
+```
+
+```html
+<h2 class="section-title" data-i18n="optionsAbout"></h2> <!-- About Upright -->
+```
 
 ## Sites
 

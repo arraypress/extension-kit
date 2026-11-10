@@ -5,6 +5,12 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] — 2026-11-10
+
+### Added
+
+- **The extension's name in messages**: `translator` (and so `localize`, `setUpPage`'s title and the `t` it returns) fills `$1` with the extension's name, `extShortName`, whenever a lookup has no substitutions. A message that names the extension (`"About $NAME$"`, content `$1`) needs nothing from the page: `data-i18n="optionsAbout"` reads “About Upright”. Replaces Clean Links' `data-name` loop and Bannerless' hand-filled headings.
+
 ## [1.3.0] — 2026-11-10
 
 ### Added
