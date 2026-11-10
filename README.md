@@ -193,6 +193,24 @@ withSite(['a.com', 'b.com'], 'a.com');       // ['b.com', 'a.com'], what a list 
 A site is http or https with a dot in its host (or `localhost`); text without a scheme is https;
 `localhost:8080` is a host and port. Pure, so a content script can load `sites/sites.js` alone.
 
+## A content script on every site
+
+```js
+// The content script runs everywhere only while the optional all-sites grant is held, less the
+// "Never on" sites; one call brings the registration in line, whatever changed.
+const sync = contentScriptSync(chrome.scripting, 'prices', async () => {
+  const settings = await store.load(chrome.storage);
+  if (!settings.everySite || !(await chrome.permissions.contains({ origins: ALL_SITES }))) return null;
+  return { js: ['content/loader.js'], matches: ALL_SITES, excludeMatches: settings.neverSites.flatMap(hostPatterns), runAt: 'document_idle' };
+});
+chrome.permissions.onAdded.addListener(() => sync());
+chrome.permissions.onRemoved.addListener(() => sync()); // site access taken back on chrome://extensions
+```
+
+Registers, updates or unregisters the script `id` to match what `want()` gives at the time (null:
+none). Calls run one after another, so a quick run of changes can't register twice or end out of
+order; a refused change rejects that call only.
+
 ## Time limits
 
 ```js
@@ -379,6 +397,8 @@ except those listed, each with a reason:
 | `installWarnings(worker, manifest)` | Chrome's own install warnings for a manifest (`chrome.management.getPermissionWarningsByManifest`, no permission needed), from a loaded extension's worker. |
 | `warningsAddedBy(worker, manifest, names)` | `{warnings, without, added}`: the warnings with and without some permissions, and those only they bring (`withoutPermissions` is the pure part). |
 | `savedTabGroups(profile)` | Chrome's saved tab groups (`{title, pinned, urls}`) read from a closed profile's `Sync Data/LevelDB`: no extension API lists them. |
+| `parseLiveOptions(argv, env, {usage})`, `parseProxy(address)` | A live checker's command line (`--only`, `--category`, `--concurrency`, `--proxy` or `HTTPS_PROXY`, `--locale`, `--timezone`, `--out`, `--help`), and a proxy address for Playwright with its password hidden for the output. |
+| `exitPoint(request)` | Where the run's traffic leaves for the internet (`{ip, country, where, source}`), from a keyless lookup service through the context's proxy: sites decide what to show by it. |
 | `filesUnder`, `zipEntries`, `missingReferences`, `manifestReferences` | For a packaging test: the zip is the folder, and every path the extension names resolves (a `#fragment` or `?query` ignored: `referencedPath`). |
 
 ## Stylesheet classes

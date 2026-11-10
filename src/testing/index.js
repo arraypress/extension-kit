@@ -12,6 +12,7 @@ export { chromeUserAgent, closeOnSignal, realisticBrowser } from './browser.js';
 export {
   CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, until,
 } from './e2e.js';
+export { exitPoint, parseLiveOptions, parseProxy } from './live.js';
 export { eachLimited } from './pool.js';
 export { serve } from './server.js';
 export { SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
@@ -26,6 +27,8 @@ export { installWarnings, warningsAddedBy, withoutPermissions } from './warnings
  * @typedef {import('./e2e.js').ExtensionProfile} ExtensionProfile
  * @typedef {import('./e2e.js').LaunchedExtension} LaunchedExtension
  * @typedef {import('./e2e.js').LaunchOptions} LaunchOptions
+ * @typedef {import('./live.js').Exit} Exit
+ * @typedef {import('./live.js').LiveOptions} LiveOptions
  * @typedef {import('./saved-groups.js').SavedTabGroup} SavedTabGroup
  * @typedef {import('./warnings.js').Manifest} Manifest
  * @typedef {import('./server.js').Reply} Reply

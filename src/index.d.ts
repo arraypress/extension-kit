@@ -17,6 +17,7 @@ export { focusedElement } from './dom/focus.js';
 export { localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
+export { contentScriptSync } from './scripting/registration.js';
 export { createSettingsSaver } from './settings/saver.js';
 export { MAX_SYNC_ITEM_BYTES } from './settings/storage.js';
 export { createSettingsStore } from './settings/store.js';
@@ -29,6 +30,7 @@ export { MENU_EDGE, createMenu, isInside, menuPosition, moreActionsButton } from
 export { SITE_LIST_MESSAGES, SITE_LIST_WORDS, createSiteList } from './ui/site-list.js';
 export { askFields, askText, checkText, fieldIds } from './ui/text-dialog.js';
 export { TOAST_MS, createToast } from './ui/toast.js';
+export type ContentScript = import('./scripting/registration.js').ContentScript;
 export type ActionMenu = import('./ui/menu.js').ActionMenu;
 export type MenuEntry = import('./ui/menu.js').MenuEntry;
 export type MenuItem = import('./ui/menu.js').MenuItem;
@@ -41,6 +43,7 @@ export type Toast = import('./ui/toast.js').Toast;
 /**
  * The page helpers' types, for a page's JSDoc.
  *
+ * @typedef {import('./scripting/registration.js').ContentScript} ContentScript
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
  * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem

@@ -18,6 +18,7 @@ export { focusedElement } from './dom/focus.js';
 export { localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
+export { contentScriptSync } from './scripting/registration.js';
 export { createSettingsSaver } from './settings/saver.js';
 export { MAX_SYNC_ITEM_BYTES } from './settings/storage.js';
 export { createSettingsStore } from './settings/store.js';
@@ -38,6 +39,7 @@ export { TOAST_MS, createToast } from './ui/toast.js';
 /**
  * The page helpers' types, for a page's JSDoc.
  *
+ * @typedef {import('./scripting/registration.js').ContentScript} ContentScript
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
  * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem
