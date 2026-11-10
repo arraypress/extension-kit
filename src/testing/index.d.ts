@@ -12,7 +12,7 @@ export { CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExten
 export { exitPoint, parseLiveOptions, parseProxy } from './live.js';
 export { eachLimited } from '../time/pool.js';
 export { filesIn, launchDownloading } from './downloads.js';
-export { serve } from './server.js';
+export { serve, testCertificate } from './server.js';
 export { SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';
 export { savedTabGroups } from './saved-groups.js';

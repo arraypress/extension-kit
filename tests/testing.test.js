@@ -2,12 +2,26 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import {
-  CHECK_MS, checkRunner, chromeUserAgent, closeOnSignal, eachLimited, realisticBrowser, serve, until,
+  CHECK_MS, checkRunner, chromeUserAgent, closeOnSignal, eachLimited, realisticBrowser, serve, testCertificate, until,
 } from '../src/testing/index.js';
 
 /** @import { Reply } from '../src/testing/server.js' */
 
 describe('serve', () => {
+  it('over HTTPS with a throwaway certificate: what Chromium reaches with --ignore-certificate-errors, as a mapped HSTS site', async () => {
+    const site = await serve({ '/': '<title>Secure</title>' }, { tls: testCertificate() });
+    const browser = await chromium.launch({ channel: 'chromium', args: ['--ignore-certificate-errors', '--host-resolver-rules=MAP www.youtube.com 127.0.0.1'] });
+    try {
+      assert.match(site.origin, /^https:\/\/127\.0\.0\.1:\d+$/);
+      const page = await browser.newPage();
+      await page.goto(`https://www.youtube.com:${site.port}/`);
+      assert.equal(await page.title(), 'Secure');
+    } finally {
+      await browser.close();
+      await site.close();
+    }
+  });
+
   it('answers each path from a table as UTF-8 HTML, ignoring the query, and anything else with a 404', async () => {
     const site = await serve({ '/': '<p>café</p>' });
     try {

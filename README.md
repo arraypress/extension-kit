@@ -398,7 +398,7 @@ except those listed, each with a reason:
 | `realisticBrowser(options)`, `chromeUserAgent(browser)` | Launch options and a user agent for a browser that doesn't say it's automated, for live checks. |
 | `closeOnSignal(close)` | On Ctrl-C or a kill, close the run's browsers, then exit. |
 | `testBuildDir(root, name)` | As in `/build`, for the tests that load the build. |
-| `serve(routes, {port})` | Serve test pages on 127.0.0.1 from a table, a `Map` or a function of the path; `{origin, port, server, close()}`. |
+| `serve(routes, {port, tls})` | Serve test pages on 127.0.0.1 from a table, a `Map` or a function of the path; `{origin, port, server, close()}`. With `tls` (`testCertificate()`, a throwaway one from `openssl`), over HTTPS: for a site Chrome reaches only over HTTPS, mapped with `--host-resolver-rules`, Chromium started with `--ignore-certificate-errors`. |
 | `until(fn, what, timeout?)` | Poll until truthy. |
 | `offscreenEmulator(cdp)` | Emulate light/dark inside the offscreen document. |
 | `recordIconCalls(worker)` | Record `chrome.action.setIcon` calls Chrome accepted. |
