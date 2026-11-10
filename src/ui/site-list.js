@@ -64,6 +64,43 @@ export const SITE_LIST_WORDS = Object.freeze({
 });
 
 /**
+ * The message key each word is read from when a page passes its `t`, so
+ * every extension's `_locales` names them alike. `removeLabel` and
+ * `moreActions` take the site as `$1` (`"More actions for $SITE$"`).
+ *
+ * @type {Readonly<Record<keyof SiteListWords, string>>}
+ */
+export const SITE_LIST_MESSAGES = Object.freeze({
+  add: 'optionsAdd',
+  addSite: 'optionsAddSite',
+  editSite: 'optionsEditSite',
+  edit: 'optionsEdit',
+  remove: 'optionsRemove',
+  save: 'optionsSave',
+  cancel: 'optionsCancel',
+  site: 'optionsSiteLabel',
+  invalid: 'optionsSiteInvalid',
+  removeLabel: 'optionsRemoveLabel',
+  moreActions: 'optionsMoreActions',
+});
+
+/**
+ * The list's words from a page's messages, under {@link SITE_LIST_MESSAGES}.
+ *
+ * @param {(key: string, substitutions?: string | string[]) => string} t - The page's message lookup.
+ * @returns {SiteListWords} The words.
+ */
+function translatedWords(t) {
+  const m = SITE_LIST_MESSAGES;
+  return {
+    add: t(m.add), addSite: t(m.addSite), editSite: t(m.editSite), edit: t(m.edit), remove: t(m.remove),
+    save: t(m.save), cancel: t(m.cancel), site: t(m.site), invalid: t(m.invalid),
+    removeLabel: (label) => t(m.removeLabel, [label]),
+    moreActions: (label) => t(m.moreActions, [label]),
+  };
+}
+
+/**
  * What {@link createSiteList} takes: the list, one way to add to it, and
  * what adding, removing and editing do.
  *
@@ -83,7 +120,10 @@ export const SITE_LIST_WORDS = Object.freeze({
  * @property {(text: string) => void} [invalid] The add row: called with what was typed when it isn't a site.
  * @property {(site: string) => string} [label] How a site reads. Default {@link siteLabel}.
  * @property {number} [maxLength] The dialog field's `maxlength`. Default {@link MAX_HOST_LENGTH}.
- * @property {Partial<SiteListWords>} [words] Translations of {@link SITE_LIST_WORDS}.
+ * @property {(key: string, substitutions?: string | string[]) => string} [t] The page's message lookup
+ *   (`setUpPage`'s): the words are then its messages under {@link SITE_LIST_MESSAGES}. Without it,
+ *   Chrome's English ({@link SITE_LIST_WORDS}).
+ * @property {Partial<SiteListWords>} [words] Words that differ from those, by name.
  */
 
 /**
@@ -105,17 +145,17 @@ export const SITE_LIST_WORDS = Object.freeze({
  * const never = createSiteList({
  *   list: byId('never-sites'), form: byId('add-never', HTMLFormElement), empty: byId('no-sites'),
  *   parse: siteHost,
- *   add: (host) => save({ neverSites: [...settings.neverSites, host] }),
- *   remove: (host) => save({ neverSites: settings.neverSites.filter((h) => h !== host) }),
- *   words: { remove: t('optionsRemove'), removeLabel: (site) => t('optionsRemoveLabel', [site]) },
+ *   add: (host) => save({ neverSites: withSite(settings.neverSites, host) }),
+ *   remove: (host) => save({ neverSites: withoutSite(settings.neverSites, host) }),
+ *   t, // its words from optionsAdd, optionsRemove, …
  * });
  * never.render(settings.neverSites);
  */
 export function createSiteList({
-  list, empty, form, addButton, parse, add, remove, replace, invalid, label = siteLabel, maxLength = MAX_HOST_LENGTH, words,
+  list, empty, form, addButton, parse, add, remove, replace, invalid, label = siteLabel, maxLength = MAX_HOST_LENGTH, t, words,
 }) {
   const doc = list.ownerDocument;
-  const w = { ...SITE_LIST_WORDS, ...words };
+  const w = { ...(t ? translatedWords(t) : SITE_LIST_WORDS), ...words };
   const menu = addButton ? createMenu({ doc }) : null;
 
   /**

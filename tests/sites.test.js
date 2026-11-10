@@ -10,10 +10,20 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import {
-  MAX_HOST_LENGTH, createSiteList, hostPatterns, onSite, originPattern, siteHost, siteLabel, siteOrigin,
+  MAX_HOST_LENGTH, createSiteList, hostPatterns, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite,
+  withSiteReplaced, withoutSite,
 } from '../src/index.js';
 
 describe('sites', () => {
+  it('a list with a site added (at the end, once), taken out, or edited in place (merged with a duplicate)', () => {
+    const sites = Object.freeze(['a.com', 'b.com', 'c.com']);
+    assert.deepEqual(withSite(sites, 'd.com'), ['a.com', 'b.com', 'c.com', 'd.com']);
+    assert.deepEqual(withSite(sites, 'a.com'), ['b.com', 'c.com', 'a.com']);
+    assert.deepEqual(withoutSite(sites, 'b.com'), ['a.com', 'c.com']);
+    assert.deepEqual(withSiteReplaced(sites, 'b.com', 'x.com'), ['a.com', 'x.com', 'c.com']);
+    assert.deepEqual(withSiteReplaced(sites, 'a.com', 'c.com'), ['c.com', 'b.com']);
+  });
+
   it('siteOrigin: the origin Chrome grants, https unless typed, no port or path', () => {
     assert.equal(siteOrigin('example.com'), 'https://example.com');
     assert.equal(siteOrigin(' www.Example.com/shop '), 'https://www.example.com');

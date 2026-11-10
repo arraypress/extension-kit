@@ -187,6 +187,7 @@ onSite(siteHost(location.href), neverSites); // on a listed site or a subdomain 
 hostPatterns('github.com');                  // ['*://github.com/*', '*://*.github.com/*'] (excludeMatches)
 originPattern('https://bit.ly/x');           // 'https://bit.ly/*' (permissions.request)
 siteLabel('https://example.com');            // 'example.com', as a list shows it
+withSite(['a.com', 'b.com'], 'a.com');       // ['b.com', 'a.com'], what a list keeps after Add (also withoutSite, withSiteReplaced)
 ```
 
 A site is http or https with a dot in its host (or `localhost`); text without a scheme is https;
@@ -259,25 +260,50 @@ restarts the wait: 10 seconds, as chrome://bookmarks's (`TOAST_MS`), or `duratio
 ### Site list
 
 ```js
-// A short list with an add row (chrome://settings), the markup in the page:
-// <ul class="list" id="sites"></ul> <p class="row text" id="no-sites">…</p>
-// <form class="row add" id="add-site"><input type="text" …><button type="submit">Add</button></form>
+// Memory Saver's way (chrome://settings/performance): an Add button and the dialog, ⋮ Edit/Remove.
+// <div class="row"><span class="label secondary">…</span><button id="add-site" type="button">Add</button></div>
+// <p class="row text" id="no-sites"><span class="label">No sites added</span></p> <ul class="list" id="sites"></ul>
 const sites = createSiteList({
-  list: byId('sites'), empty: byId('no-sites'), form: byId('add-site', HTMLFormElement),
-  parse: siteOrigin,
-  add: async (origin) => (await chrome.permissions.request({ origins: [originPattern(origin)] })) && save(origin),
-  remove: (origin) => unsave(origin),
-  words: { remove: t('optionsRemove'), removeLabel: (site) => t('optionsRemoveLabel', [site]) },
+  list: byId('sites'), empty: byId('no-sites'), addButton: byId('add-site'),
+  parse: siteHost,
+  add: (site) => save({ sites: withSite(settings.sites, site) }),
+  remove: (site) => save({ sites: withoutSite(settings.sites, site) }),
+  replace: (site, edited) => save({ sites: withSiteReplaced(settings.sites, site, edited) }),
+  t, // the page's messages, under the standard keys below
 });
 sites.render(settings.sites);
 
-// Memory Saver's way (chrome://settings/performance): an Add button and the dialog, ⋮ Edit/Remove.
-createSiteList({ list, empty, addButton: byId('add-site'), parse: siteHost, add, remove, replace: (old, edited) => … });
+// A short list with an add row (chrome://settings): `form` instead of `addButton`.
+// <form class="row add" id="add-site"><input type="text" …><button type="submit">Add</button></form>
 ```
 
-`add` resolving to false keeps the typed text (access refused); `invalid(text)` hears what isn't
-a site in the add row; the dialog keeps its Add off with “Enter a site, like example.com” under
-the field. `words` translates `SITE_LIST_WORDS`.
+`withSite` adds a site at the end, once (added again, it moves there); `withoutSite` takes it out;
+`withSiteReplaced` edits it in place, merging it with a duplicate. A list that needs site access
+asks for it in `add`/`replace` (the dialog's click still counts as the person's) and gives it back
+in `remove`. `add` resolving to false keeps the add row's text (access refused); `invalid(text)`
+hears what isn't a site in the add row; the dialog keeps its Add off with “Enter a site, like
+example.com” under the field.
+
+The words: Chrome's English (`SITE_LIST_WORDS`) without `t`; with it, the page's messages under
+these keys (`SITE_LIST_MESSAGES`), so every extension's `_locales` names them alike. `words`
+overrides only those that differ.
+
+| Word | Key | English |
+|---|---|---|
+| `add` | `optionsAdd` | Add |
+| `addSite` | `optionsAddSite` | Add site |
+| `editSite` | `optionsEditSite` | Edit site |
+| `edit` | `optionsEdit` | Edit |
+| `remove` | `optionsRemove` | Remove |
+| `save` | `optionsSave` | Save |
+| `cancel` | `optionsCancel` | Cancel |
+| `site` | `optionsSiteLabel` | Site |
+| `invalid` | `optionsSiteInvalid` | Enter a site, like example.com |
+| `moreActions` | `optionsMoreActions` | More actions for `$SITE$` (content `$1`; the ⋮ button) |
+| `removeLabel` | `optionsRemoveLabel` | Remove `$SITE$` (content `$1`; the add row's Remove button) |
+
+A list with an Add button needs every key but `optionsRemoveLabel`; one with an add row needs
+`optionsRemove` and `optionsRemoveLabel`. A locale test can check them against `SITE_LIST_MESSAGES`.
 
 ## Build helpers (`@arraypress/extension-kit/build`)
 

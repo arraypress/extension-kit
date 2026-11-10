@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { serve, until } from '../src/testing/index.js';
-import { TOAST_MS } from '../src/index.js';
+import { SITE_LIST_MESSAGES, SITE_LIST_WORDS, TOAST_MS } from '../src/index.js';
 
 /** @import { Browser, Page } from 'playwright' */
 /** @import { ActionMenu } from '../src/index.js' */
@@ -447,12 +447,15 @@ describe('site list with an Add button (Chromium)', () => {
   /**
    * A fresh page with a Memory Saver–style site list: an Add button, the dialog, ⋮ menus.
    *
+   * @param {Record<string, string>} [messages] - The page's messages (`$1` for the site), for
+   *   `t`; without them, the kit's English.
    * @returns {Promise<Page>} The page; `window.sites` is the list as stored.
    */
-  const withSiteList = async () => {
+  const withSiteList = async (messages) => {
     const page = await open();
-    await page.evaluate(() => {
+    await page.evaluate((messages) => {
       const { kit } = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+      const t = messages && ((/** @type {string} */ key, /** @type {string | string[]} */ subs = '') => messages[key]?.replace('$1', [subs].flat()[0] ?? '') ?? key);
       document.body.insertAdjacentHTML('beforeend', '<ul class="list" id="sites"></ul><p id="none">No sites added</p><button id="add-site" type="button">Add</button>');
       const win = /** @type {any} */ (window);
       win.sites = ['github.com'];
@@ -461,12 +464,13 @@ describe('site list with an Add button (Chromium)', () => {
         empty: /** @type {HTMLElement} */ (document.getElementById('none')),
         addButton: /** @type {HTMLElement} */ (document.getElementById('add-site')),
         parse: kit.siteHost,
-        add: (site) => { win.sites = [...win.sites, site]; list.render(win.sites); },
-        remove: (site) => { win.sites = win.sites.filter((/** @type {string} */ s) => s !== site); list.render(win.sites); },
-        replace: (site, edited) => { win.sites = win.sites.map((/** @type {string} */ s) => (s === site ? edited : s)); list.render(win.sites); },
+        add: (site) => list.render(win.sites = kit.withSite(win.sites, site)),
+        remove: (site) => list.render(win.sites = kit.withoutSite(win.sites, site)),
+        replace: (site, edited) => list.render(win.sites = kit.withSiteReplaced(win.sites, site, edited)),
+        t,
       });
       list.render(win.sites);
-    });
+    }, messages);
     return page;
   };
   /** @param {Page} page */
@@ -503,5 +507,31 @@ describe('site list with an Add button (Chromium)', () => {
     assert.deepEqual(await stored(page), []);
     assert.equal(await page.locator('#none').isVisible(), true);
     await page.close();
+  });
+
+  it('given the page’s t, its words are the page’s messages under the standard keys', async () => {
+    /** @type {Record<string, string>} */
+    const german = {
+      optionsAdd: 'Hinzufügen', optionsAddSite: 'Website hinzufügen', optionsEditSite: 'Website bearbeiten',
+      optionsEdit: 'Bearbeiten', optionsRemove: 'Entfernen', optionsSave: 'Speichern', optionsCancel: 'Abbrechen',
+      optionsSiteLabel: 'Website', optionsSiteInvalid: 'Gib eine Website ein, z. B. example.com',
+      optionsMoreActions: 'Weitere Aktionen für $1',
+    };
+    const page = await withSiteList(german);
+    await page.getByRole('button', { name: 'Weitere Aktionen für github.com' }).click();
+    assert.deepEqual(await page.getByRole('menuitem').allInnerTexts(), ['Bearbeiten', 'Entfernen']);
+    await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Website bearbeiten' });
+    await dialog.getByRole('textbox', { name: 'Website' }).fill('not a site');
+    assert.equal(await page.locator('#text-dialog-error').innerText(), 'Gib eine Website ein, z. B. example.com');
+    assert.deepEqual(await dialog.getByRole('button').allInnerTexts(), ['Abbrechen', 'Speichern']);
+    await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    assert.equal(await page.getByRole('dialog', { name: 'Website hinzufügen' }).getByRole('button', { name: 'Hinzufügen' }).count(), 1);
+    await page.close();
+  });
+
+  it('the standard keys name every word', () => {
+    assert.deepEqual(Object.keys(SITE_LIST_MESSAGES).sort(), Object.keys(SITE_LIST_WORDS).sort());
   });
 });

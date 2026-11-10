@@ -3,7 +3,8 @@
  * "https://www.Example.com/shop") and as pages report them (`location.href`):
  * the origin an extension asks Chrome for access to, the host a per-site
  * on/off list keeps, whether a page is on a listed site (subdomains
- * included), and the match patterns for both. Pure.
+ * included), the match patterns for both, and a list with a site added,
+ * taken out or edited. Pure.
  *
  * A site is a web host: http or https, with a dot in its name (or
  * `localhost`). Text without a scheme is read as https.
@@ -80,3 +81,34 @@ export declare function originPattern(url: string): string;
  * siteLabel('http://example.com');  // 'http://example.com'
  */
 export declare function siteLabel(site: string): string;
+/**
+ * A site list with `site` added: at the end, once (a site added again moves
+ * there).
+ *
+ * @param {readonly string[]} sites - The list.
+ * @param {string} site - The site to add.
+ * @returns {string[]} A new list.
+ * @example
+ * withSite(['a.com', 'b.com'], 'a.com'); // ['b.com', 'a.com']
+ */
+export declare function withSite(sites: readonly string[], site: string): string[];
+/**
+ * A site list without `site`.
+ *
+ * @param {readonly string[]} sites - The list.
+ * @param {string} site - The site to take out.
+ * @returns {string[]} A new list.
+ */
+export declare function withoutSite(sites: readonly string[], site: string): string[];
+/**
+ * A site list with `site` edited to `edited`, in its place, once (an edit
+ * to a site already listed merges the two).
+ *
+ * @param {readonly string[]} sites - The list.
+ * @param {string} site - The site as it was.
+ * @param {string} edited - What it was edited to.
+ * @returns {string[]} A new list.
+ * @example
+ * withSiteReplaced(['a.com', 'b.com'], 'a.com', 'b.com'); // ['b.com']
+ */
+export declare function withSiteReplaced(sites: readonly string[], site: string, edited: string): string[];

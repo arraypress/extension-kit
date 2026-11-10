@@ -90,6 +90,14 @@ export type SiteListWords = {
  */
 /** @type {Readonly<SiteListWords>} */
 export declare const SITE_LIST_WORDS: Readonly<SiteListWords>;
+/**
+ * The message key each word is read from when a page passes its `t`, so
+ * every extension's `_locales` names them alike. `removeLabel` and
+ * `moreActions` take the site as `$1` (`"More actions for $SITE$"`).
+ *
+ * @type {Readonly<Record<keyof SiteListWords, string>>}
+ */
+export declare const SITE_LIST_MESSAGES: Readonly<Record<keyof SiteListWords, string>>;
 export type SiteListOptions = {
     /**
      * The `<ul class="list">` to fill.
@@ -140,7 +148,13 @@ export type SiteListOptions = {
      */
     maxLength?: number;
     /**
-     * Translations of {@link SITE_LIST_WORDS}.
+     * The page's message lookup
+     * (`setUpPage`'s): the words are then its messages under {@link SITE_LIST_MESSAGES}. Without it,
+     * Chrome's English ({@link SITE_LIST_WORDS}).
+     */
+    t?: (key: string, substitutions?: string | string[]) => string;
+    /**
+     * Words that differ from those, by name.
      */
     words?: Partial<SiteListWords>;
 };
@@ -170,7 +184,10 @@ export type SiteList = {
  * @property {(text: string) => void} [invalid] The add row: called with what was typed when it isn't a site.
  * @property {(site: string) => string} [label] How a site reads. Default {@link siteLabel}.
  * @property {number} [maxLength] The dialog field's `maxlength`. Default {@link MAX_HOST_LENGTH}.
- * @property {Partial<SiteListWords>} [words] Translations of {@link SITE_LIST_WORDS}.
+ * @property {(key: string, substitutions?: string | string[]) => string} [t] The page's message lookup
+ *   (`setUpPage`'s): the words are then its messages under {@link SITE_LIST_MESSAGES}. Without it,
+ *   Chrome's English ({@link SITE_LIST_WORDS}).
+ * @property {Partial<SiteListWords>} [words] Words that differ from those, by name.
  */
 /**
  * A site list.
@@ -190,10 +207,10 @@ export type SiteList = {
  * const never = createSiteList({
  *   list: byId('never-sites'), form: byId('add-never', HTMLFormElement), empty: byId('no-sites'),
  *   parse: siteHost,
- *   add: (host) => save({ neverSites: [...settings.neverSites, host] }),
- *   remove: (host) => save({ neverSites: settings.neverSites.filter((h) => h !== host) }),
- *   words: { remove: t('optionsRemove'), removeLabel: (site) => t('optionsRemoveLabel', [site]) },
+ *   add: (host) => save({ neverSites: withSite(settings.neverSites, host) }),
+ *   remove: (host) => save({ neverSites: withoutSite(settings.neverSites, host) }),
+ *   t, // its words from optionsAdd, optionsRemove, …
  * });
  * never.render(settings.neverSites);
  */
-export declare function createSiteList({ list, empty, form, addButton, parse, add, remove, replace, invalid, label, maxLength, words, }: SiteListOptions): SiteList;
+export declare function createSiteList({ list, empty, form, addButton, parse, add, remove, replace, invalid, label, maxLength, t, words, }: SiteListOptions): SiteList;
