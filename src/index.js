@@ -24,6 +24,7 @@ export { createSettingsStore } from './settings/store.js';
 export {
   MAX_HOST_LENGTH, hostPatterns, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite, withSiteReplaced, withoutSite,
 } from './sites/sites.js';
+export { within } from './time/time.js';
 export { POLL_MS, watchSchemeOffscreen } from './toolbar/offscreen.js';
 export { DARK_QUERY, TOOLBAR_DARK_KEY, TOOLBAR_SCHEME, reportColorScheme, schemeSender, watchColorScheme } from './toolbar/scheme.js';
 export {

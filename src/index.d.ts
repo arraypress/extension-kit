@@ -21,6 +21,7 @@ export { createSettingsSaver } from './settings/saver.js';
 export { MAX_SYNC_ITEM_BYTES } from './settings/storage.js';
 export { createSettingsStore } from './settings/store.js';
 export { MAX_HOST_LENGTH, hostPatterns, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite, withSiteReplaced, withoutSite, } from './sites/sites.js';
+export { within } from './time/time.js';
 export { POLL_MS, watchSchemeOffscreen } from './toolbar/offscreen.js';
 export { DARK_QUERY, TOOLBAR_DARK_KEY, TOOLBAR_SCHEME, reportColorScheme, schemeSender, watchColorScheme } from './toolbar/scheme.js';
 export { OFFSCREEN_PATH, TOOLBAR_ICON_DIR, createToolbarTheme, startToolbarTheme, toolbarIcon, watchFromOffscreen, } from './toolbar/theme.js';

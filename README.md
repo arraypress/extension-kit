@@ -193,6 +193,16 @@ withSite(['a.com', 'b.com'], 'a.com');       // ['b.com', 'a.com'], what a list 
 A site is http or https with a dot in its host (or `localhost`); text without a scheme is https;
 `localhost:8080` is a host and port. Pure, so a content script can load `sites/sites.js` alone.
 
+## Time limits
+
+```js
+const groups = await within(chrome.tabGroups.query({}), 2000, []); // a Chrome call that may never answer
+```
+
+`within(promise, ms, fallback)`: the value in time, or the fallback (late or failed); never
+rejects; its timer cleared once the work settles (the work itself isn't stopped). In the runtime
+half, so a service worker or page can use it; the test helpers use it too.
+
 ## Page components
 
 Chrome's own components, made in the page by script (no markup to copy), styled by `chrome-ui.css`.
@@ -338,7 +348,6 @@ except those listed, each with a reason:
 | `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
 | `extensionProfile(chromium, dir, options)` | A profile to start the browser on more than once (a restart, a first start with a changed manifest): `{dir, launch(), remove()}`. |
 | `checkRunner({timeout})` | Named checks that report and go on: `check(name, fn, {timeout})`, `fail(name)` for an error found outside a check, `finish()`. A check that runs past its limit (`CHECK_MS`, 60 s) fails, and the run goes on. |
-| `within(promise, ms, fallback)` | The value in time, or the fallback (late or failed); never rejects; its timer cleared. |
 | `eachLimited(items, limit, work)` | Work through a list at most `limit` at once, `work(item, slot, index)`. |
 | `realisticBrowser(options)`, `chromeUserAgent(browser)` | Launch options and a user agent for a browser that doesn't say it's automated, for live checks. |
 | `closeOnSignal(close)` | On Ctrl-C or a kill, close the run's browsers, then exit. |

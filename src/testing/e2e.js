@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { deadline } from './time.js';
+import { deadline } from '../time/time.js';
 
 /** @import { BrowserContext, BrowserType, CDPSession, Page, Worker } from 'playwright' */
 

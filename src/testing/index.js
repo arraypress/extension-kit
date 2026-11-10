@@ -13,7 +13,6 @@ export {
   CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, until,
 } from './e2e.js';
 export { eachLimited } from './pool.js';
-export { within } from './time.js';
 export { serve } from './server.js';
 export { SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';

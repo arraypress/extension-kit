@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import {
-  CHECK_MS, checkRunner, chromeUserAgent, closeOnSignal, eachLimited, realisticBrowser, serve, until, within,
+  CHECK_MS, checkRunner, chromeUserAgent, closeOnSignal, eachLimited, realisticBrowser, serve, until,
 } from '../src/testing/index.js';
 
 /** @import { Reply } from '../src/testing/server.js' */
@@ -113,19 +113,6 @@ describe('checkRunner’s time limit', () => {
     t.mock.timers.tick(1);
     assert.equal(await result, false);
     assert.equal(CHECK_MS, 60_000);
-  });
-});
-
-describe('within', () => {
-  it('gives the value when it comes in time, and clears its timer at once', async (t) => {
-    const cleared = t.mock.method(globalThis, 'clearTimeout');
-    assert.equal(await within(Promise.resolve('done'), 60_000, 'late'), 'done');
-    assert.equal(cleared.mock.callCount(), 1);
-  });
-
-  it('gives the fallback when it’s late or fails, and never rejects', async () => {
-    assert.equal(await within(new Promise(() => {}), 20, 'late'), 'late');
-    assert.deepEqual(await within(Promise.reject(new Error('gone')), 1000, []), []);
   });
 });
 

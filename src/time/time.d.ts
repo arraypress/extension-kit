@@ -1,8 +1,9 @@
 /**
- * Time limits for tests that drive a real browser, where a page that stops
- * responding would otherwise hold a run up forever.
+ * Time limits for work that may never finish: a Chrome call a service worker
+ * shouldn't wait on forever, or, in tests that drive a real browser, a page
+ * that stops responding. Runs anywhere (worker, page, Node).
  *
- * @module testing/time
+ * @module time/time
  */
 /**
  * Settle `promise` within `ms`, or settle the way `late` says. The timer is
@@ -19,9 +20,9 @@
 export declare function deadline<T>(promise: Promise<T>, ms: number, late: (resolve: (value: T) => void, reject: (error: Error) => void) => void): Promise<T>;
 /**
  * A promise's value within a time limit, or `fallback` when it's late or
- * fails: for a step a live run should give up on and go past (a renderer
- * that stopped responding, a close that never returns). The work itself
- * isn't stopped; the timer is cleared once it settles.
+ * fails: for a step to give up on and go past (a Chrome call that never
+ * answers, a renderer that stopped responding, a close that never returns).
+ * The work itself isn't stopped; the timer is cleared once it settles.
  *
  * @template T
  * @param {Promise<T>} promise - The work.

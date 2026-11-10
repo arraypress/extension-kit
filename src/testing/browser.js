@@ -8,7 +8,7 @@
  * @module testing/browser
  */
 
-import { within } from './time.js';
+import { within } from '../time/time.js';
 
 /** @import { Browser } from 'playwright' */
 

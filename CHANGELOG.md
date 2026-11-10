@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The extension's name in messages**: `translator` (and so `localize`, `setUpPage`'s title and the `t` it returns) fills `$1` with the extension's name, `extShortName`, whenever a lookup has no substitutions. A message that names the extension (`"About $NAME$"`, content `$1`) needs nothing from the page: `data-i18n="optionsAbout"` reads “About Upright”. Replaces Clean Links' `data-name` loop and Bannerless' hand-filled headings.
 - **`createSiteList({t})`**: given the page's message lookup, the list's words are its messages under standard keys, `SITE_LIST_MESSAGES` (`optionsAdd`, `optionsAddSite`, `optionsEditSite`, `optionsEdit`, `optionsRemove`, `optionsSave`, `optionsCancel`, `optionsSiteLabel`, `optionsSiteInvalid`, `optionsMoreActions`, `optionsRemoveLabel`); `words` overrides only those that differ. `SITE_LIST_WORDS` is exported from the package root. Replaces the same words block in Clean Links, Bannerless, Upright and Better Tables.
+- **`within`** (`time/`) is in the runtime half, exported from the main entry and vendored with the rest (`RUNTIME_ENTRIES` gains `time`), for a service worker that mustn't wait on a Chrome call forever (Better Downloads).
 - **`withSite`, `withoutSite`, `withSiteReplaced`** (`sites/`): a site list with a site added (at the end, once), taken out, or edited in place (merged with a duplicate). Replaces the same three list edits in every extension's site lists.
+
+### Removed
+
+- **`within` from `/testing`**: import it from the main entry (`@arraypress/extension-kit`).
 
 ## [1.3.0] — 2026-11-10
 
