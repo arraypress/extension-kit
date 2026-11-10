@@ -12,7 +12,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import {
-  extensionProfile, installWarnings, launchExtension, savedTabGroups, until, warningsAddedBy, withoutPermissions,
+  extensionProfile, filesIn, installWarnings, launchDownloading, launchExtension, savedTabGroups, serve, until, warningsAddedBy,
+  withoutPermissions,
 } from '../src/testing/index.js';
 
 /**
@@ -81,4 +82,25 @@ describe('saved tab groups', () => {
       await profile.remove();
     }
   }));
+});
+
+describe('a browser that downloads for real', () => {
+  it('chrome.downloads.download lands in the profile’s Downloads folder under the name given, in its folder', async () => {
+    const site = await serve({ '/a.txt': { body: 'hello', type: 'text/plain' } });
+    try {
+      await withExtension({ permissions: ['downloads'] }, async (dir) => {
+        const { worker, downloads, close } = await launchDownloading(chromium, dir, { prefix: 'extension-kit-dl-' });
+        try {
+          assert.deepEqual(await filesIn(downloads), []);
+          await worker.evaluate((url) => chrome.downloads.download({ url, filename: 'Folder/Named.txt' }), `${site.origin}/a.txt`);
+          const files = await until(async () => (await filesIn(downloads)).length && filesIn(downloads), 'the download');
+          assert.deepEqual(files, [path.join('Folder', 'Named.txt')]);
+        } finally {
+          await close();
+        }
+      });
+    } finally {
+      await site.close();
+    }
+  });
 });

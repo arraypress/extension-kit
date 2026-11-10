@@ -391,6 +391,7 @@ except those listed, each with a reason:
 |---|---|
 | `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`: JSON copies, `onChanged` for real changes only, sync's 8,192-byte item quota and 120 writes a minute. `settled()` waits for listeners. |
 | `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
+| `launchDownloading(chromium, dir, options)`, `filesIn(dir)` | An extension in a browser that downloads for real: `{…launchExtension's, downloads}`, the profile's own Downloads folder (Playwright otherwise saves downloads under made-up names no extension sees); the files under a folder, downloads still running left out. |
 | `extensionProfile(chromium, dir, options)` | A profile to start the browser on more than once (a restart, a first start with a changed manifest): `{dir, launch(), remove()}`. |
 | `checkRunner({timeout})` | Named checks that report and go on: `check(name, fn, {timeout})`, `fail(name)` for an error found outside a check, `finish()`. A check that runs past its limit (`CHECK_MS`, 60 s) fails, and the run goes on. |
 | `eachLimited(items, limit, work)` | Work through a list at most `limit` at once, `work(item, slot, index)` (also in the main entry). |
