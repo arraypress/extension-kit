@@ -1,7 +1,7 @@
 /**
  * The page components' pure parts (where a menu goes, whether a text can be
- * used) and what runs in jsdom: the toast and the ⋮ button. The menu and the
- * dialog need a real `<dialog>`, so they're tested in Chromium
+ * used) and what runs in jsdom: the ⋮ button. The menu, the dialog and the
+ * toast need a real `<dialog>` and popovers, so they're tested in Chromium
  * (ui-chromium.test.js).
  *
  * @module tests/ui
@@ -9,7 +9,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { MENU_EDGE, TOAST_MS, checkText, createToast, isInside, menuPosition, moreActionsButton } from '../src/index.js';
+import { MENU_EDGE, checkText, isInside, menuPosition, moreActionsButton } from '../src/index.js';
 
 const viewport = { width: 800, height: 600 };
 const size = { width: 160, height: 120 };
@@ -57,80 +57,6 @@ describe('checkText', () => {
     assert.deepEqual(checkText('Research'), { ok: true, reason: '' });
     assert.deepEqual(checkText('news', site), { ok: false, reason: 'Enter a site, like example.com' });
     assert.deepEqual(checkText('news.example', site), { ok: true, reason: '' });
-  });
-});
-
-describe('toast', () => {
-  const page = () => new JSDOM('<!doctype html><body></body>').window.document;
-
-  /**
-   * A page with a toast, on mocked timers.
-   *
-   * @param {import('node:test').TestContext} t - The test (for its timers).
-   * @param {import('../src/ui/toast.js').ToastOptions} [options] - The toast's options.
-   */
-  const timed = (t, options = {}) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const doc = page();
-    return { doc, toast: createToast({ doc, ...options }) };
-  };
-
-  it('is a polite live region from the start, hidden until shown', () => {
-    const doc = page();
-    const toast = createToast({ doc });
-    assert.equal(toast.element.outerHTML,
-      '<div id="toast" class="toast" role="status" aria-live="polite" hidden=""><span id="toast-text"></span><button id="toast-undo" type="button" hidden="">Undo</button></div>');
-    assert.equal(doc.body.lastElementChild, toast.element);
-  });
-
-  it('shows the message with Undo; Undo hides it and runs once', (t) => {
-    const { doc, toast } = timed(t);
-    let undone = 0;
-    toast.show('Deleted “Research”', () => { undone++; });
-    const undo = /** @type {HTMLButtonElement} */ (doc.getElementById('toast-undo'));
-    assert.equal(doc.getElementById('toast-text')?.textContent, 'Deleted “Research”');
-    assert.equal(toast.element.hidden, false);
-    assert.equal(undo.hidden, false);
-    undo.click();
-    undo.click();
-    assert.equal(undone, 1);
-    assert.equal(toast.element.hidden, true);
-  });
-
-  it('goes after chrome://bookmarks’s ten seconds; a new message restarts the wait and drops the old Undo', (t) => {
-    const { doc, toast } = timed(t);
-    let undone = false;
-    toast.show('Deleted “Research”', () => { undone = true; });
-    t.mock.timers.tick(TOAST_MS - 1000);
-    toast.show('Copied');
-    assert.equal(/** @type {HTMLElement} */ (doc.getElementById('toast-undo')).hidden, true);
-    t.mock.timers.tick(TOAST_MS - 1);
-    assert.equal(toast.element.hidden, false);
-    t.mock.timers.tick(1);
-    assert.equal(toast.element.hidden, true);
-    /** @type {HTMLElement} */ (doc.getElementById('toast-undo')).click();
-    assert.equal(undone, false);
-  });
-
-  it('takes its own Undo text and times, with and without Undo', (t) => {
-    const { doc, toast } = timed(t, { undoLabel: 'Rückgängig', duration: 4000, undoDuration: 8000 });
-    assert.equal(doc.getElementById('toast-undo')?.textContent, 'Rückgängig');
-    toast.show('Gespeichert');
-    t.mock.timers.tick(4000);
-    assert.equal(toast.element.hidden, true);
-    toast.show('Gelöscht', () => {});
-    t.mock.timers.tick(4000);
-    assert.equal(toast.element.hidden, false);
-    t.mock.timers.tick(4000);
-    assert.equal(toast.element.hidden, true);
-  });
-
-  it('hide() takes it down at once', () => {
-    const doc = page();
-    const toast = createToast({ doc });
-    toast.show('Saved');
-    toast.hide();
-    assert.equal(toast.element.hidden, true);
   });
 });
 

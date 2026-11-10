@@ -5,6 +5,24 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-11-10
+
+### Added
+
+- **Sites** (`sites/`): `siteOrigin`, `siteHost`, `onSite`, `hostPatterns`, `originPattern`, `siteLabel`, `MAX_HOST_LENGTH`: what people type into a per-site list, and whether a page is on one (subdomains included). From Upright's, Better Tables', Bannerless', Clean Links' and More Tab Actions' copies.
+- **`createSiteList`** (`ui/site-list.js`): a settings card's site list, with an add row (Upright, Better Tables, Bannerless) or an Add button, the one-field dialog and a ⋮ menu with Edit and Remove per row (More Tab Actions, Clean Links); `SITE_LIST_WORDS` for translations. `chrome-ui.css`: `.row.add`.
+- **`setUpPage(chrome, {title})`** (`dom/setup.js`): what every page does first (report its colour scheme, localise, set the title). From Bannerless' `page-setup.js`.
+- **`focusedElement`** (`dom/focus.js`): the focused element through open shadow roots.
+- **`/build`**: `renderIcons` and `ICON_SIZES` (the manifest's icons from `icon.svg`); `vendorPackage` and `packageDir` (files of any installed package into `extension/vendor/`), `checkVendored` and `VENDOR_STAMP` (each copy is stamped with its package's version; a stale one is named); `buildTestCopy`, `testBuildDir` and `TEST_BUILDS_ENV` (test builds in `.test-builds/`, movable with `EXTENSION_TEST_BUILDS`); `storeFrame` (the store-screenshot canvas and Chrome window, from Upright's `store/tools/frame.mjs`).
+- **`extension-kit` command**: `vendor <dir> <package> <path>...`, `vendor-check [dir]`, `icons [dir]`, `toolbar-icons [dir]`.
+- **`/testing`**: a time limit per check in `checkRunner` (`CHECK_MS`, 60 s; `checkRunner({timeout})`, `check(name, fn, {timeout})`), so a hang fails instead of blocking; `within` (a value in time, or a fallback, its timer cleared), `eachLimited` (a pool), `realisticBrowser`, `chromeUserAgent` and `closeOnSignal` (a live run that passes for a person's browser and closes it on Ctrl-C), `testBuildDir`. From Bannerless' live checker.
+
+### Changed
+
+- **`createMenu` and `createToast`** take `root` (an element or a shadow root, e.g. a content script's) and read the focus through shadow roots. A content script that loads `ui/menu.js` or `ui/toast.js` from a vendored copy must list `vendor/extension-kit/dom/focus.js` in `web_accessible_resources` too.
+- **The toast is a manual `popover`**, in the top layer: over anything a page stacks. It's open while `:popover-open` (no longer `hidden`).
+- **`vendorKit`** writes `vendored.json`; the zip helpers leave it out (`ZIP_EXCLUDE`, `shipsFile`). A vendored copy now includes `sites/`.
+
 ## [1.2.0] — 2026-11-09
 
 ### Added

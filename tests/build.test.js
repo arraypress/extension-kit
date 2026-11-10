@@ -4,9 +4,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { githubAboutLinks, isPlaceholder } from '../src/index.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
 import {
-  RUNTIME_ENTRIES, STYLESHEET, clonesFromReport, disallowedClones, placeholderWarning, printReleaseChecks,
-  repositoryReminder, shipsFile, toolbarIconFile, vendorKit,
+  HOOK_FILE, ICON_SIZES, RUNTIME_ENTRIES, STYLESHEET, TEST_BUILDS_ENV, VENDOR_STAMP, buildTestCopy, checkVendored,
+  clonesFromReport, disallowedClones, packageDir, placeholderWarning, printReleaseChecks, renderIcons, repositoryReminder,
+  shipsFile, storeFrame, testBuildDir, toolbarIconFile, vendorKit, vendorPackage,
 } from '../src/build/index.js';
 import { filesUnder, missingReferences, referencedPath, zipEntries } from '../src/testing/index.js';
 
@@ -38,6 +43,9 @@ async function writeTree(dir, files) {
 }
 
 const REPO = 'https://github.com/arraypress/example-extension';
+
+/** The kit's command. */
+const BIN = fileURLToPath(new URL('../bin/extension-kit.js', import.meta.url));
 
 describe('About links', () => {
   it('point into the GitHub repository: README, Issues, PRIVACY.md', () => {
@@ -89,7 +97,9 @@ describe('vendoring', () => {
     assert.ok(!files.includes('stale.js'));
     assert.ok(files.includes('index.js') && files.includes('styles/chrome-ui.css') && files.includes('toolbar/theme.js'));
     assert.ok(!files.some((file) => file.startsWith('build/') || file.startsWith('testing/')), 'no Node-only code');
-    assert.deepEqual(new Set(files.map((file) => file.split('/')[0])), new Set(RUNTIME_ENTRIES));
+    assert.deepEqual(new Set(files.map((file) => file.split('/')[0])), new Set([...RUNTIME_ENTRIES, VENDOR_STAMP]));
+    const kit = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    assert.deepEqual(JSON.parse(await readFile(path.join(dest, VENDOR_STAMP), 'utf8')), { package: kit.name, version: kit.version });
     assert.equal(await readFile(path.join(dest, 'styles', 'chrome-ui.css'), 'utf8'), await readFile(STYLESHEET, 'utf8'));
   }));
 
@@ -100,11 +110,138 @@ describe('vendoring', () => {
   }));
 });
 
+describe('vendoring a package', () => {
+  /**
+   * An extension repository with a package installed: `node_modules/@scope/lib` at `version`, whose
+   * `exports` hide its package.json (as autoconsent's do).
+   *
+   * @param {string} dir - The repository.
+   * @param {string} version - The installed version.
+   */
+  const install = (dir, version) => writeTree(dir, {
+    'package.json': '{"name": "extension"}',
+    'node_modules/@scope/lib/package.json': JSON.stringify({ name: '@scope/lib', version, exports: { '.': './dist/lib.cjs' } }),
+    'node_modules/@scope/lib/dist/lib.esm.js': 'export const lib = 1;',
+    'node_modules/@scope/lib/rules/rules.json': '[]',
+    'node_modules/@scope/lib/LICENSE': 'MPL',
+    'node_modules/@scope/lib/src/index.js': "export * from './parse.js';",
+    'node_modules/@scope/lib/src/parse.js': 'export const parse = 1;',
+  });
+
+  it('copies named files by their own names, and a folder’s contents for a path ending in /, stamped', () => inTemp(async (dir) => {
+    await install(dir, '2.0.0');
+    const dest = path.join(dir, 'extension', 'vendor', 'lib');
+    await writeTree(dest, { 'stale.js': 'old' });
+    assert.deepEqual(await vendorPackage('@scope/lib', ['dist/lib.esm.js', 'rules/rules.json', 'LICENSE'], dest, { from: dir }),
+      ['lib.esm.js', 'rules.json', 'LICENSE']);
+    assert.deepEqual(await filesUnder(dest), ['LICENSE', 'lib.esm.js', 'rules.json', VENDOR_STAMP]);
+    assert.deepEqual(JSON.parse(await readFile(path.join(dest, VENDOR_STAMP), 'utf8')), { package: '@scope/lib', version: '2.0.0' });
+    await vendorPackage('@scope/lib', ['src/'], dest, { from: path.join(dir, 'extension') });
+    assert.deepEqual(await filesUnder(dest), ['index.js', 'parse.js', VENDOR_STAMP]);
+    await assert.rejects(vendorPackage('@scope/missing', ['x.js'], dest, { from: dir }), /@scope\/missing isn't installed/);
+    assert.equal(await packageDir('@scope/lib', path.join(dir, 'extension', 'vendor')), path.join(dir, 'node_modules', '@scope', 'lib'));
+  }));
+
+  it('checkVendored names each copy that no longer matches what’s installed', () => inTemp(async (dir) => {
+    await install(dir, '2.0.0');
+    const vendor = path.join(dir, 'extension', 'vendor');
+    await vendorPackage('@scope/lib', ['LICENSE'], path.join(vendor, 'lib'), { from: dir });
+    await writeTree(vendor, { 'generated/consent.js': '' });
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), []);
+    await install(dir, '2.1.0'); // `npm install @scope/lib@2.1.0`: the extension's postinstall doesn't run.
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), [`${path.join(vendor, 'lib')} is @scope/lib 2.0.0; 2.1.0 is installed`]);
+    await rm(path.join(dir, 'node_modules', '@scope'), { recursive: true });
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), [`${path.join(vendor, 'lib')} is @scope/lib 2.0.0, which isn't installed`]);
+    assert.deepEqual(await checkVendored(path.join(dir, 'nothing-here'), { from: dir }), []);
+  }));
+
+  it('extension-kit vendor and vendor-check, as npm scripts run them', () => inTemp(async (dir) => {
+    await install(dir, '2.0.0');
+    const run = (/** @type {string[]} */ ...args) => promisify(execFile)(process.execPath, [BIN, ...args], { cwd: dir });
+    await run('vendor', 'extension/vendor/lib', '@scope/lib', 'src/');
+    assert.deepEqual(await filesUnder(path.join(dir, 'extension', 'vendor', 'lib')), ['index.js', 'parse.js', VENDOR_STAMP]);
+    assert.match((await run('vendor-check')).stdout, /extension\/vendor matches the installed packages/);
+    await install(dir, '2.1.0');
+    await assert.rejects(run('vendor-check'), (error) => {
+      const { code, stderr } = /** @type {{code: number, stderr: string}} */ (error);
+      assert.equal(code, 1);
+      assert.match(stderr, /extension\/vendor\/lib is @scope\/lib 2\.0\.0; 2\.1\.0 is installed/);
+      assert.match(stderr, /npm run postinstall/);
+      return true;
+    });
+  }));
+});
+
+describe('test builds', () => {
+  it('testBuildDir: .test-builds/<name>, or under $EXTENSION_TEST_BUILDS', () => {
+    assert.equal(testBuildDir('/repo'), '/repo/.test-builds/e2e');
+    assert.equal(testBuildDir('/repo', 'e2e-all-sites', {}), '/repo/.test-builds/e2e-all-sites');
+    assert.equal(testBuildDir('/repo', 'e2e', { [TEST_BUILDS_ENV]: '/tmp/before' }), '/tmp/before/e2e');
+    assert.equal(testBuildDir('/repo', 'live', { [TEST_BUILDS_ENV]: '.test-builds/second' }), '/repo/.test-builds/second/live');
+  });
+
+  it('buildTestCopy: the extension, its hook as the service worker, and the manifest as changed', () => inTemp(async (dir) => {
+    await writeTree(dir, {
+      'extension/manifest.json': JSON.stringify({ background: { service_worker: 'background.js', type: 'module' }, permissions: ['storage'] }),
+      'extension/background.js': '', 'test/hook.js': "import './background.js';",
+    });
+    const to = testBuildDir(dir, 'e2e', {});
+    await writeTree(to, { 'stale.js': '' });
+    await buildTestCopy({
+      from: path.join(dir, 'extension'), to, hook: path.join(dir, 'test', 'hook.js'),
+      manifest: (manifest) => { manifest.host_permissions = ['http://127.0.0.1/*']; manifest.permissions?.push('webNavigation'); },
+    });
+    assert.deepEqual(await filesUnder(to), ['background.js', HOOK_FILE, 'manifest.json']);
+    assert.deepEqual(JSON.parse(await readFile(path.join(to, 'manifest.json'), 'utf8')), {
+      background: { service_worker: HOOK_FILE, type: 'module' }, permissions: ['storage', 'webNavigation'], host_permissions: ['http://127.0.0.1/*'],
+    });
+    await buildTestCopy({ from: path.join(dir, 'extension'), to });
+    assert.equal(JSON.parse(await readFile(path.join(to, 'manifest.json'), 'utf8')).background.service_worker, 'background.js');
+  }));
+});
+
+describe('icons', () => {
+  it('renderIcons renders icon.svg in its own colours at the manifest’s sizes', () => inTemp(async (dir) => {
+    await writeFile(path.join(dir, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="#0b57d0"/></svg>');
+    const written = await renderIcons({ chromium, dir });
+    assert.deepEqual(written, ICON_SIZES.map((size) => path.join(dir, `icon-${size}.png`)));
+    const page = await (await chromium.launch()).newPage();
+    try {
+      for (const size of ICON_SIZES) {
+        const png = await readFile(path.join(dir, `icon-${size}.png`));
+        const pixel = await page.evaluate(async (base64) => {
+          const image = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+          const canvas = new OffscreenCanvas(image.width, image.height);
+          const context = /** @type {OffscreenCanvasRenderingContext2D} */ (canvas.getContext('2d'));
+          context.drawImage(image, 0, 0);
+          return [image.width, image.height, ...context.getImageData(image.width / 2, image.height / 2, 1, 1).data];
+        }, png.toString('base64'));
+        assert.deepEqual(pixel, [size, size, 11, 87, 208, 255], `icon-${size}.png`);
+      }
+    } finally {
+      await page.context().browser()?.close();
+    }
+  }));
+});
+
+describe('store frame', () => {
+  it('draws a caption and a Chrome window around content captured at the geometry’s size', () => {
+    const { W, H, canvas, geometry, windowChrome } = storeFrame;
+    const geo = geometry(1.25);
+    assert.deepEqual(geo.content, { width: 922, height: 462 });
+    const html = canvas({ caption: 'Rotate any image', theme: 'dark', chrome: windowChrome({ tabs: [{ title: 'A <b>', icon: 'a.png', active: true }], url: 'example.com/x', urlHost: 'example.com', theme: 'dark' }), content: 'shot.png', geo });
+    assert.match(html, new RegExp(`width: ${W}px; height: ${H}px`));
+    assert.match(html, /<div class="caption">Rotate any image<\/div>/);
+    assert.match(html, /<span class="title">A &lt;b&gt;<\/span>/);
+    assert.match(html, /<img src="shot.png" width="922" height="462"/);
+  });
+});
+
 describe('packaging', () => {
-  it('the zip is the folder less SVG sources, declarations and .DS_Store, with no folder entries', () => inTemp(async (dir) => {
+  it('the zip is the folder less SVG sources, declarations, vendor stamps and .DS_Store, with no folder entries', () => inTemp(async (dir) => {
     await writeTree(dir, {
       'manifest.json': '{}', 'icons/icon-16.png': 'png', 'icons/toolbar/glyph.svg': '<svg/>',
-      'vendor/kit/index.js': '', 'vendor/kit/index.d.ts': '', '.DS_Store': 'x', 'options/.DS_Store': 'x',
+      'vendor/kit/index.js': '', 'vendor/kit/index.d.ts': '', [`vendor/kit/${VENDOR_STAMP}`]: '{}', '.DS_Store': 'x', 'options/.DS_Store': 'x',
     });
     const entries = await zipEntries(dir);
     assert.deepEqual(entries, (await filesUnder(dir)).filter(shipsFile));

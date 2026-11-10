@@ -1,13 +1,19 @@
 /**
- * Toolbar glyphs: render an extension's monochrome toolbar icon in Chrome's
- * own toolbar-icon colours, light and dark, at 16, 32 and 48px, for
- * toolbar/theme.js to switch between.
+ * An extension's icons, rendered from SVG in Playwright's Chromium.
  *
- * A folder holds the sources: `glyph.svg` (16×16 viewBox, drawn in
- * `currentColor`) and, optionally, `glyph-16.svg`, the same mark hand-fitted
- * to whole pixels for the 16px file (a 1.5px stroke smears at 1x). Out come
- * `light-16.png`, `dark-16.png`, … beside them. The caller passes its own
- * Playwright, so this package needs none.
+ * The toolbar glyphs: an extension's monochrome toolbar icon in Chrome's own
+ * toolbar-icon colours, light and dark, at 16, 32 and 48px, for
+ * toolbar/theme.js to switch between. A folder holds the sources:
+ * `glyph.svg` (16×16 viewBox, drawn in `currentColor`) and, optionally,
+ * `glyph-16.svg`, the same mark hand-fitted to whole pixels for the 16px file
+ * (a 1.5px stroke smears at 1x). Out come `light-16.png`, `dark-16.png`, …
+ * beside them.
+ *
+ * The extension's own icon (the manifest's `icons`, the Chrome Web Store's
+ * tile): `icon.svg`, in its own colours, rendered to `icon-16.png` … `icon-128.png`
+ * beside it.
+ *
+ * The caller passes its own Playwright, so this package needs none.
  *
  * @module build/toolbar-icons
  */
@@ -50,6 +56,8 @@ export declare const TOOLBAR_ICON_SIZES: readonly number[];
  * @returns {string} For example `light-16.png`.
  */
 export declare function toolbarIconFile(scheme: 'light' | 'dark', size: number): string;
+/** The sizes the manifest's `icons` lists: the toolbar and menus (16, 32), the extensions page (48), the store (128). */
+export declare const ICON_SIZES: readonly number[];
 export type BrowserLauncher = {
     launch: () => Promise<{
         newPage(options: {
@@ -68,17 +76,9 @@ export type BrowserLauncher = {
         close(): Promise<void>;
     }>;
 };
+export type IconBrowser = Awaited<ReturnType<BrowserLauncher['launch']>>;
 /**
- * The parts of a Playwright `BrowserType` (`chromium`) this uses.
- *
- * @typedef {object} BrowserLauncher
- * @property {() => Promise<{newPage(options: {viewport: {width: number, height: number}, deviceScaleFactor: number}): Promise<{
- *   setContent(html: string): Promise<void>,
- *   screenshot(options: {omitBackground: boolean}): Promise<Uint8Array>,
- *   close(): Promise<void>}>, close(): Promise<void>}>} launch
- */
-/**
- * Render every scheme and size from `dir`'s sources into `dir`.
+ * Render every scheme and size of the toolbar glyph from `dir`'s sources into `dir`.
  *
  * @param {object} options - What to render with and where.
  * @param {BrowserLauncher} options.chromium - Playwright's `chromium`.
@@ -88,8 +88,26 @@ export type BrowserLauncher = {
  * @example
  * import { chromium } from 'playwright';
  * await renderToolbarIcons({ chromium, dir: 'extension/icons/toolbar' });
+ * // or, from an npm script: extension-kit toolbar-icons extension/icons/toolbar
  */
 export declare function renderToolbarIcons({ chromium, dir, sizes }: {
+    chromium: BrowserLauncher;
+    dir: string;
+    sizes?: readonly number[];
+}): Promise<string[]>;
+/**
+ * Render the extension's icon, `dir/icon.svg`, to `icon-<size>.png` beside it.
+ *
+ * @param {object} options - What to render with and where.
+ * @param {BrowserLauncher} options.chromium - Playwright's `chromium`.
+ * @param {string} options.dir - The folder with `icon.svg`.
+ * @param {readonly number[]} [options.sizes] - Default {@link ICON_SIZES}.
+ * @returns {Promise<string[]>} The files written.
+ * @example
+ * await renderIcons({ chromium, dir: 'extension/icons' });
+ * // or, from an npm script: extension-kit icons extension/icons
+ */
+export declare function renderIcons({ chromium, dir, sizes }: {
     chromium: BrowserLauncher;
     dir: string;
     sizes?: readonly number[];

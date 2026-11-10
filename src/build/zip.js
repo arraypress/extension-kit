@@ -11,20 +11,22 @@ import path from 'node:path';
 
 /**
  * `zip -x` patterns left out by default (a `*` crosses folders): SVG sources
- * of rendered icons, type declarations that only editors read, and Finder's
+ * of rendered icons, type declarations that only editors read, the stamps
+ * of vendored copies (`vendored.json`, build/vendor.js), and Finder's
  * `.DS_Store` files.
  */
-export const ZIP_EXCLUDE = Object.freeze(['icons/*.svg', '*.d.ts', '*.DS_Store']);
+export const ZIP_EXCLUDE = Object.freeze(['icons/*.svg', '*.d.ts', '*/vendored.json', '*.DS_Store']);
 
 /**
  * Whether a file under an extension folder ships, by the same rules as
  * {@link ZIP_EXCLUDE}: for tests that compare the zip with the folder.
  *
  * @param {string} file - Path relative to the extension folder, forward slashes.
- * @returns {boolean} False for `icons/**.svg`, `*.d.ts` and `.DS_Store`.
+ * @returns {boolean} False for `icons/**.svg`, `*.d.ts`, a vendored copy's `vendored.json` and `.DS_Store`.
  */
 export function shipsFile(file) {
-  return !/^icons\/.*\.svg$/.test(file) && !file.endsWith('.d.ts') && path.posix.basename(file) !== '.DS_Store';
+  return !/^icons\/.*\.svg$/.test(file) && !file.endsWith('.d.ts') && !/\/vendored\.json$/.test(file)
+    && path.posix.basename(file) !== '.DS_Store';
 }
 
 /**

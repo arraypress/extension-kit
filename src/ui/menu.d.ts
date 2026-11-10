@@ -140,13 +140,18 @@ export type MenuOptions = {
      */
     placement?: 'over' | 'below';
     /**
-     * The page. Default `document`.
+     * Where the menu goes: an element, or a shadow root (a content
+     * script's, so the page's styles never reach it). Default the page's `body`.
+     */
+    root?: ParentNode;
+    /**
+     * The page. Default `root`'s document, else `document`.
      */
     doc?: Document;
 };
 export type ActionMenu = {
     /**
-     * The `<dialog class="menu" role="menu">`, in the page's body.
+     * The `<dialog class="menu" role="menu">`, in `root`.
      */
     element: HTMLDialogElement;
     /**
@@ -165,13 +170,15 @@ export type ActionMenu = {
  * @typedef {object} MenuOptions
  * @property {string} [id] The menu element's id.
  * @property {'over' | 'below'} [placement] Where it opens from a button. Default `'over'`, as Chrome's.
- * @property {Document} [doc] The page. Default `document`.
+ * @property {ParentNode} [root] Where the menu goes: an element, or a shadow root (a content
+ *   script's, so the page's styles never reach it). Default the page's `body`.
+ * @property {Document} [doc] The page. Default `root`'s document, else `document`.
  */
 /**
  * A page's action menu.
  *
  * @typedef {object} ActionMenu
- * @property {HTMLDialogElement} element The `<dialog class="menu" role="menu">`, in the page's body.
+ * @property {HTMLDialogElement} element The `<dialog class="menu" role="menu">`, in `root`.
  * @property {(entries: readonly MenuEntry[], where: MenuPlace) => void} open Fill it with `entries`
  *   and open it (closing it first if it's open).
  * @property {() => void} close Close it, if open, and return the focus.
@@ -180,7 +187,7 @@ export type ActionMenu = {
  * Make a page's action menu: one `<dialog class="menu">` that any number of
  * ⋮ buttons (or right-clicks) open with their own items.
  *
- * @param {MenuOptions} [options] - Its id, placement and page.
+ * @param {MenuOptions} [options] - Its id, placement, and where it goes.
  * @returns {ActionMenu} The menu.
  * @example
  * const menu = createMenu();
@@ -192,7 +199,7 @@ export type ActionMenu = {
  *   ], {anchor: button}),
  * }));
  */
-export declare function createMenu({ id, placement, doc }?: MenuOptions): ActionMenu;
+export declare function createMenu({ id, placement, root, doc }?: MenuOptions): ActionMenu;
 export type MoreActionsOptions = {
     /**
      * The whole label, for a page that translates it. Default

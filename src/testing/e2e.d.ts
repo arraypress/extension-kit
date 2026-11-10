@@ -143,11 +143,16 @@ export declare function offscreenEmulator(cdp: CDPSession, suffix?: string): Pro
  * @returns {Promise<() => Promise<unknown[]>>} Reads the recorded `path`s, oldest first.
  */
 export declare function recordIconCalls(worker: Worker): Promise<() => Promise<unknown[]>>;
+/** How long one check may take before it's failed, in ms: long enough for a slow real-browser check, short of a hang. */
+export declare const CHECK_MS = 60000;
 export type CheckRunner = {
     /**
-     * Run one check; resolves to whether it passed.
+     *   Run one check, failed if it takes longer than `timeout` (default the runner's); resolves to
+     *   whether it passed.
      */
-    check: (name: string, fn: () => unknown) => Promise<boolean>;
+    check: (name: string, fn: () => unknown, options?: {
+        timeout?: number;
+    }) => Promise<boolean>;
     /**
      * Count a failure found outside any check (a page's
      * uncaught error, say): printed now, listed and counted at the end.
@@ -163,23 +168,31 @@ export type CheckRunner = {
  * script goes on, so one run shows everything that's wrong.
  *
  * @typedef {object} CheckRunner
- * @property {(name: string, fn: () => unknown) => Promise<boolean>} check Run one check; resolves to whether it passed.
+ * @property {(name: string, fn: () => unknown, options?: {timeout?: number}) => Promise<boolean>} check
+ *   Run one check, failed if it takes longer than `timeout` (default the runner's); resolves to
+ *   whether it passed.
  * @property {(name: string) => void} fail Count a failure found outside any check (a page's
  *   uncaught error, say): printed now, listed and counted at the end.
  * @property {() => void} finish Print the tally, and exit with 1 if anything failed.
  */
 /**
  * Make a {@link CheckRunner}: "✓ name" for a pass, "✗ name" and the error's
- * message, indented, for a failure.
+ * message, indented, for a failure. A check that hangs (a page that never
+ * answers) fails once its time is up, and the script goes on; what it was
+ * doing isn't stopped, so `finish()` exits rather than wait for it.
  *
+ * @param {{timeout?: number}} [options] - `timeout`: each check's limit in ms. Default {@link CHECK_MS}.
  * @returns {CheckRunner} The runner.
  * @example
  * const { check, fail, finish } = checkRunner();
  * page.on('pageerror', (error) => fail(`page error: ${error.message}`));
  * await check('the menu opens', async () => { … });
+ * await check('a live site answers', async () => { … }, { timeout: 120_000 });
  * finish();
  */
-export declare function checkRunner(): CheckRunner;
+export declare function checkRunner({ timeout: runnerTimeout }?: {
+    timeout?: number;
+}): CheckRunner;
 export type SchemePage = {
     /**
      * From the extension's root, e.g. `options/options.html`.

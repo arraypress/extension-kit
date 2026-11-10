@@ -621,6 +621,9 @@ label.row, .row[actionable] { cursor: pointer; }
 .list { list-style: none; margin: 0; padding: 0; }
 .list:empty { display: none; }
 
+/* A row that adds to the list above it (createSiteList): a field the row's width, then "Add". */
+.row.add input { flex: 1; min-width: 0; }
+
 /* About card, as chrome://settings/help (about_page.css): a 32px logo 10px from a 20px title. */
 .about-product { justify-content: flex-start; gap: 10px; }
 .product-title { font-size: 20px; }
@@ -780,11 +783,11 @@ label.row, .row[actionable] { cursor: pointer; }
 
 /* ------------------------------------------------------- Toast (cr-toast) */
 
+/* A manual popover (createToast), in the top layer, or a page's own element shown and hidden with
+   `hidden`: the popover defaults undone either way. */
 .toast {
     position: fixed;
-    left: 0;
-    bottom: 0;
-    z-index: 2;
+    inset: auto auto 0 0;
     display: flex;
     align-items: center;
     gap: 32px;
@@ -796,9 +799,15 @@ label.row, .row[actionable] { cursor: pointer; }
     border-radius: 8px;
     background: var(--toast-bg);
     color: var(--toast-text);
+    width: auto;
+    height: auto;
+    overflow: visible;
+    border: 0;
     line-height: 20px;
     box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.28);
 }
+
+.toast[popover]:not(:popover-open) { display: none; }
 
 .toast button {
     height: auto;
@@ -1082,9 +1091,7 @@ button.floating .icon { width: 20px; height: 20px; }
 
 /* The toast in a panel: the panel's width less 8px each side, above the footer. */
 .side-panel .toast {
-    left: 8px;
-    right: 8px;
-    bottom: 56px;
+    inset: auto 8px 56px 8px;
     min-width: 0;
     max-width: none;
     margin: 0;

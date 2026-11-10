@@ -11,9 +11,12 @@ The pieces ArrayPress's Chrome extensions share, so each is written once:
 - **About links**: README, Issues and PRIVACY.md in the extension's GitHub repository, plus
   package-time warnings for placeholder links.
 - **Chrome's page components**: the ⋮ action menu and its row button, the one-field dialog
-  ("Rename folder"), and the toast with Undo, built on the stylesheet's classes.
-- **Build and test helpers** (Node): toolbar icon rendering, zipping for the Chrome Web Store, a
-  fake `chrome.storage`, Playwright helpers, packaging checks, and a copied-code guard.
+  ("Rename folder"), the toast with Undo and a settings card's site list, built on the
+  stylesheet's classes; they work in a content script's shadow root too.
+- **Sites**: what people type into a per-site list, and whether a page is on one.
+- **Build and test helpers** (Node): icon rendering, vendoring npm packages (with a staleness
+  check), test builds, store screenshots, zipping for the Chrome Web Store, a fake
+  `chrome.storage`, Playwright helpers with time limits, packaging checks, and a copied-code guard.
 
 Zero dependencies. Every runtime function takes the `chrome` APIs it uses as arguments, so tests run
 the real logic against fakes.
@@ -51,6 +54,22 @@ import { startToolbarTheme } from '../vendor/extension-kit/index.js';
 
 The copy is made from the installed package every `npm install`, so it can't drift from the
 version in `package.json`. The zip helper leaves its `.d.ts` files out.
+
+Other libraries are copied the same way, by name (a path ending in `/` copies a folder's contents):
+
+```json
+{
+  "scripts": {
+    "postinstall": "extension-kit vendor extension/vendor/extension-kit && extension-kit vendor extension/vendor/clean-link @arraypress/clean-link src/",
+    "test": "extension-kit vendor-check && eslint . && …"
+  }
+}
+```
+
+`npm install some-package` doesn't run the extension's own `postinstall`, so a copy can go stale
+without a word. Each copy is stamped with its package's version (`vendored.json`, left out of the
+zip), and `extension-kit vendor-check` fails, naming the copy, until `npm run postinstall` remakes
+it. From a script: `vendorPackage(name, files, dest)`, `checkVendored(dir)`.
 
 ### An extension with a bundler
 
@@ -113,13 +132,16 @@ call `createToolbarTheme({storage, action, extensionId})` in the worker and pass
 the reports, which the content script sends with `reportColorScheme(media, stored,
 schemeSender(chrome.runtime))`.
 
-Render the glyphs from `icons/toolbar/glyph.svg` (and optional pixel-fitted `glyph-16.svg`):
+Render the glyphs from `icons/toolbar/glyph.svg` (and optional pixel-fitted `glyph-16.svg`), and
+the extension's own icon from `icons/icon.svg` to `icon-16.png` … `icon-128.png`, with the
+extension's Playwright:
 
-```js
-import { chromium } from 'playwright';
-import { renderToolbarIcons } from '@arraypress/extension-kit/build';
-await renderToolbarIcons({ chromium, dir: 'extension/icons/toolbar' });
+```json
+{ "scripts": { "icons": "extension-kit icons", "toolbar-icons": "extension-kit toolbar-icons" } }
 ```
+
+(`extension-kit toolbar-icons src/icons/toolbar` for another folder; from a script,
+`renderIcons` and `renderToolbarIcons({chromium, dir})`.)
 
 Colours are Chrome 157's toolbar icon colours, #474747 / #C7C7C7 (sources in the file).
 
@@ -134,11 +156,36 @@ At the end of `npm run package`, `printReleaseChecks(ABOUT_LINKS, REPOSITORY)` w
 link is a placeholder (`isPlaceholder`: example.com/.org/.net) and reminds you the repository must
 be public before the store listing goes live.
 
+## Page start-up
+
+```js
+const t = setUpPage(chrome, { title: 'optionsTitle', substitutions: [name] });
+```
+
+Reports the page's colour scheme for the toolbar glyph (`watchColorScheme`; a failure is only
+logged), fills its `data-i18n` text (`localize`), sets its title from a message, and returns the
+page's `t`.
+
+## Sites
+
+```js
+siteOrigin('example.com');                   // 'https://example.com', what Chrome grants access to
+siteHost(' https://www.GitHub.com/a ');      // 'github.com', what a per-site list keeps
+onSite(siteHost(location.href), neverSites); // on a listed site or a subdomain of one
+hostPatterns('github.com');                  // ['*://github.com/*', '*://*.github.com/*'] (excludeMatches)
+originPattern('https://bit.ly/x');           // 'https://bit.ly/*' (permissions.request)
+siteLabel('https://example.com');            // 'example.com', as a list shows it
+```
+
+A site is http or https with a dot in its host (or `localhost`); text without a scheme is https;
+`localhost:8080` is a host and port. Pure, so a content script can load `sites/sites.js` alone.
+
 ## Page components
 
 Chrome's own components, made in the page by script (no markup to copy), styled by `chrome-ui.css`.
-Each takes `doc` (default `document`); the wording defaults to Chrome's English and takes a
-translation.
+Each takes `doc` (default `document`); the menu and the toast also take `root`, an element or a
+shadow root to go in (a content script's, so the page's styles never reach them), and follow the
+focus through shadow roots. The wording defaults to Chrome's English and takes a translation.
 
 ### ⋮ menu (cr-action-menu)
 
@@ -192,9 +239,33 @@ toast.show(`Deleted “${workspace.name}”`, () => restore(workspace));
 toast.show('Copied'); // no Undo
 ```
 
-`#toast` (`role="status"`), bottom left. A new message replaces the last and restarts the wait:
-10 seconds, as chrome://bookmarks's (`TOAST_MS`), or `duration` / `undoDuration`. Undo hides it
-and runs once. `undoLabel` translates the button.
+`#toast` (`role="status"`), bottom left, a manual `popover` so it's in the top layer, over
+anything the page stacks (`:popover-open` while it shows). A new message replaces the last and
+restarts the wait: 10 seconds, as chrome://bookmarks's (`TOAST_MS`), or `duration` /
+`undoDuration`. Undo hides it and runs once. `undoLabel` translates the button.
+
+### Site list
+
+```js
+// A short list with an add row (chrome://settings), the markup in the page:
+// <ul class="list" id="sites"></ul> <p class="row text" id="no-sites">…</p>
+// <form class="row add" id="add-site"><input type="text" …><button type="submit">Add</button></form>
+const sites = createSiteList({
+  list: byId('sites'), empty: byId('no-sites'), form: byId('add-site', HTMLFormElement),
+  parse: siteOrigin,
+  add: async (origin) => (await chrome.permissions.request({ origins: [originPattern(origin)] })) && save(origin),
+  remove: (origin) => unsave(origin),
+  words: { remove: t('optionsRemove'), removeLabel: (site) => t('optionsRemoveLabel', [site]) },
+});
+sites.render(settings.sites);
+
+// Memory Saver's way (chrome://settings/performance): an Add button and the dialog, ⋮ Edit/Remove.
+createSiteList({ list, empty, addButton: byId('add-site'), parse: siteHost, add, remove, replace: (old, edited) => … });
+```
+
+`add` resolving to false keeps the typed text (access refused); `invalid(text)` hears what isn't
+a site in the add row; the dialog keeps its Add off with “Enter a site, like example.com” under
+the field. `words` translates `SITE_LIST_WORDS`.
 
 ## Build helpers (`@arraypress/extension-kit/build`)
 
@@ -203,7 +274,12 @@ and runs once. `undoLabel` translates the button.
 | `zipExtension(from, to, exclude?)` | Zip a folder for the Chrome Web Store, files only, less `ZIP_EXCLUDE` (icon SVG sources, `.d.ts`, `.DS_Store`). |
 | `shipsFile(file)` | Whether a file ships, by the same rules. |
 | `vendorKit(dest)` | Copy the browser half into an extension (the `extension-kit vendor` command). |
-| `renderToolbarIcons({chromium, dir})` | See above. |
+| `vendorPackage(name, files, dest)`, `packageDir(name)` | Copy files of an installed package, stamped (`extension-kit vendor <dir> <package> <path>...`). |
+| `checkVendored(dir)` | The stale copies under `dir` (`extension-kit vendor-check`). |
+| `renderIcons`, `renderToolbarIcons({chromium, dir})` | See above. |
+| `buildTestCopy({from, to, hook, manifest})` | A test build: the extension, `hook` as its service worker (`e2e-hook.js`), the manifest changed. |
+| `testBuildDir(root, name)` | `.test-builds/<name>`, or under `$EXTENSION_TEST_BUILDS` (to test another build, or run two side by side). |
+| `storeFrame` | Store screenshots: `canvas`, `windowChrome`, `geometry`, `letterIcon`, `cursor`, `THEMES`, `W`×`H`. |
 | `placeholderWarning`, `repositoryReminder`, `printReleaseChecks` | See About links. |
 | `findDisallowedClones({runJscpd})` | Run jscpd and return clones `.jscpd-allowlist.json` doesn't cover (the `extension-kit duplication` command). |
 
@@ -223,7 +299,12 @@ except those listed, each with a reason:
 | `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`: JSON copies, `onChanged` for real changes only, sync's 8,192-byte item quota and 120 writes a minute. `settled()` waits for listeners. |
 | `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
 | `extensionProfile(chromium, dir, options)` | A profile to start the browser on more than once (a restart, a first start with a changed manifest): `{dir, launch(), remove()}`. |
-| `checkRunner()` | Named checks that report and go on: `check(name, fn)`, `fail(name)` for an error found outside a check, `finish()`. |
+| `checkRunner({timeout})` | Named checks that report and go on: `check(name, fn, {timeout})`, `fail(name)` for an error found outside a check, `finish()`. A check that runs past its limit (`CHECK_MS`, 60 s) fails, and the run goes on. |
+| `within(promise, ms, fallback)` | The value in time, or the fallback (late or failed); never rejects; its timer cleared. |
+| `eachLimited(items, limit, work)` | Work through a list at most `limit` at once, `work(item, slot, index)`. |
+| `realisticBrowser(options)`, `chromeUserAgent(browser)` | Launch options and a user agent for a browser that doesn't say it's automated, for live checks. |
+| `closeOnSignal(close)` | On Ctrl-C or a kill, close the run's browsers, then exit. |
+| `testBuildDir(root, name)` | As in `/build`, for the tests that load the build. |
 | `serve(routes, {port})` | Serve test pages on 127.0.0.1 from a table, a `Map` or a function of the path; `{origin, port, server, close()}`. |
 | `until(fn, what, timeout?)` | Poll until truthy. |
 | `offscreenEmulator(cdp)` | Emulate light/dark inside the offscreen document. |
@@ -253,13 +334,14 @@ except those listed, each with a reason:
 | Toggle (cr-toggle) | `<input type="checkbox" class="switch" role="switch">` |
 | Select (md-select) | plain `<select>` |
 | Text field (cr-input) | plain `<input>`, `<textarea>`; `.field` > `label` + input for a labelled one |
+| Add row under a list | `<form class="row add">` with an `<input>` and a submit `<button>` (or `createSiteList`) |
 | Buttons (cr-button) | plain `<button>`; `.action` filled; `.link` as a link; `.icon-button` 32px round |
 | Settings menu | `.nav` > `ul.nav-list` > `a.nav-item[aria-current="page"]`, `.nav-separator` |
 | Manager layout | `.manager`/`.layout`, `.sidebar` with `.tree` > `.tree-item`, `.main` with `.list-card` |
 | Menu (cr-action-menu) | `<dialog class="menu">` of `button[role="menuitem"]`, `hr` (or `createMenu`) |
 | ⋮ icon | `<span class="icon icon-more-vert" aria-hidden="true">` (or `moreActionsButton`) |
 | Dialog (cr-dialog) | `<dialog class="dialog"><form method="dialog">` `.dialog-title`, `.dialog-body`, `.dialog-buttons` (one field: `askText`) |
-| Toast (cr-toast) | `<div class="toast">text <button>Undo</button></div>` (or `createToast`) |
+| Toast (cr-toast) | `<div class="toast" popover="manual">text <button>Undo</button></div>` (or `createToast`); with `hidden` instead of `popover`, it shows over the page but not the top layer |
 | Drawer (cr-drawer) | `<dialog class="drawer">` with `.drawer-head` and a `.nav` |
 | Side panel page | `<body class="side-panel">`: the panel's colours, a column 100vh high |
 | Panel tabs (cr-tabs) | `<div class="tabs" role="tablist">` of `button.tab[role="tab"][aria-selected]` |
@@ -278,7 +360,8 @@ chrome://bookmarks in Chromium 156 / Chrome 157; the sources are listed at the t
 ## Development
 
 `npm test` runs ESLint, a strict TypeScript check of the JSDoc (`checkJs`), the tests (the menu,
-the dialog and the Chrome readers in Playwright's Chromium, the rest in Node and jsdom), and the
+the dialog, the toast, the dialog site list, icon rendering and the Chrome readers in Playwright's
+Chromium, the rest in Node and jsdom), and the
 copied-code guard. The `.d.ts` files are generated from the JSDoc: `npm run types` writes them, and
 the type check fails while one is stale (it regenerates them into `.types/` and compares).
 

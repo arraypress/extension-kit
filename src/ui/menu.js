@@ -14,6 +14,8 @@
  * @module ui/menu
  */
 
+import { focusedElement, rootDocument } from '../dom/focus.js';
+
 /** The gap kept between a menu and the window's edges, in px. */
 export const MENU_EDGE = 8;
 
@@ -103,14 +105,16 @@ export function isInside(box, x, y) {
  * @typedef {object} MenuOptions
  * @property {string} [id] The menu element's id.
  * @property {'over' | 'below'} [placement] Where it opens from a button. Default `'over'`, as Chrome's.
- * @property {Document} [doc] The page. Default `document`.
+ * @property {ParentNode} [root] Where the menu goes: an element, or a shadow root (a content
+ *   script's, so the page's styles never reach it). Default the page's `body`.
+ * @property {Document} [doc] The page. Default `root`'s document, else `document`.
  */
 
 /**
  * A page's action menu.
  *
  * @typedef {object} ActionMenu
- * @property {HTMLDialogElement} element The `<dialog class="menu" role="menu">`, in the page's body.
+ * @property {HTMLDialogElement} element The `<dialog class="menu" role="menu">`, in `root`.
  * @property {(entries: readonly MenuEntry[], where: MenuPlace) => void} open Fill it with `entries`
  *   and open it (closing it first if it's open).
  * @property {() => void} close Close it, if open, and return the focus.
@@ -120,7 +124,7 @@ export function isInside(box, x, y) {
  * Make a page's action menu: one `<dialog class="menu">` that any number of
  * ⋮ buttons (or right-clicks) open with their own items.
  *
- * @param {MenuOptions} [options] - Its id, placement and page.
+ * @param {MenuOptions} [options] - Its id, placement, and where it goes.
  * @returns {ActionMenu} The menu.
  * @example
  * const menu = createMenu();
@@ -132,13 +136,13 @@ export function isInside(box, x, y) {
  *   ], {anchor: button}),
  * }));
  */
-export function createMenu({ id, placement = 'over', doc = document } = {}) {
+export function createMenu({ id, placement = 'over', root, doc = rootDocument(root) } = {}) {
   const view = /** @type {Window & typeof globalThis} */ (doc.defaultView);
   const menu = doc.createElement('dialog');
   menu.className = 'menu';
   menu.setAttribute('role', 'menu');
   if (id) menu.id = id;
-  doc.body.append(menu);
+  (root ?? doc.body).append(menu);
 
   /** @type {HTMLElement | null} */
   let returnFocus = null;
@@ -164,7 +168,7 @@ export function createMenu({ id, placement = 'over', doc = document } = {}) {
 
   menu.addEventListener('keydown', (event) => {
     const list = items();
-    const at = list.indexOf(/** @type {HTMLButtonElement} */ (doc.activeElement));
+    const at = list.indexOf(/** @type {HTMLButtonElement} */ (focusedElement(doc)));
     /** @param {number} index */
     const go = (index) => {
       event.preventDefault();
@@ -215,7 +219,7 @@ export function createMenu({ id, placement = 'over', doc = document } = {}) {
       if (label) menu.setAttribute('aria-label', label);
       else menu.removeAttribute('aria-label');
 
-      const active = doc.activeElement;
+      const active = focusedElement(doc);
       returnFocus = focusTo ?? anchor ?? (active instanceof view.HTMLElement ? active : null);
       if (anchor?.hasAttribute('aria-haspopup')) {
         anchor.setAttribute('aria-expanded', 'true');

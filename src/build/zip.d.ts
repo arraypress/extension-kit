@@ -6,7 +6,8 @@
  */
 /**
  * `zip -x` patterns left out by default (a `*` crosses folders): SVG sources
- * of rendered icons, type declarations that only editors read, and Finder's
+ * of rendered icons, type declarations that only editors read, the stamps
+ * of vendored copies (`vendored.json`, build/vendor.js), and Finder's
  * `.DS_Store` files.
  */
 export declare const ZIP_EXCLUDE: readonly string[];
@@ -15,7 +16,7 @@ export declare const ZIP_EXCLUDE: readonly string[];
  * {@link ZIP_EXCLUDE}: for tests that compare the zip with the folder.
  *
  * @param {string} file - Path relative to the extension folder, forward slashes.
- * @returns {boolean} False for `icons/**.svg`, `*.d.ts` and `.DS_Store`.
+ * @returns {boolean} False for `icons/**.svg`, `*.d.ts`, a vendored copy's `vendored.json` and `.DS_Store`.
  */
 export declare function shipsFile(file: string): boolean;
 /**

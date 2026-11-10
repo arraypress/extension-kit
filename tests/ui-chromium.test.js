@@ -1,7 +1,7 @@
 /**
- * The ⋮ menu and the one-field dialog in Playwright's Chromium: they're built
- * on a modal `<dialog>`, its backdrop, the top layer and real focus, none of
- * which jsdom has. The kit's own modules and stylesheet are served to a page
+ * The ⋮ menu, the one-field dialog and the toast in Playwright's Chromium:
+ * they're built on a modal `<dialog>`, its backdrop, popovers, the top layer,
+ * shadow roots and real focus, none of which jsdom has. The kit's own modules and stylesheet are served to a page
  * and driven with real keys and clicks.
  *
  * @module tests/ui-chromium
@@ -12,7 +12,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { serve } from '../src/testing/index.js';
+import { serve, until } from '../src/testing/index.js';
+import { TOAST_MS } from '../src/index.js';
 
 /** @import { Browser, Page } from 'playwright' */
 /** @import { ActionMenu } from '../src/index.js' */
@@ -274,6 +275,233 @@ describe('text dialog (Chromium)', () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     assert.equal(await answer(page), null);
     assert.equal(await page.locator('dialog#text-dialog').count(), 1, 'one dialog, made once');
+    await page.close();
+  });
+});
+
+/**
+ * A fresh page with a content script's controls, their menu open from its ⋮ button: a host with
+ * an open shadow root holding the kit's stylesheet and a ⋮ button, a menu and a toast made in that
+ * root (`root`), and a page element stacked as high as a page can stack, over the bottom-left
+ * corner where the toast shows.
+ *
+ * @returns {Promise<Page>} The page.
+ */
+async function withShadowMenuOpen() {
+  const page = await open();
+  await page.evaluate(addShadowControls);
+  await page.locator('controls-host').getByRole('button', { name: 'More actions for “Table”' }).click();
+  return page;
+}
+
+/** Runs in the page: see {@link withShadowMenuOpen}. */
+async function addShadowControls() {
+  const { kit } = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+  const bar = document.createElement('div');
+  bar.id = 'page-bar';
+  bar.style.cssText = 'position: fixed; left: 0; bottom: 0; width: 100vw; height: 200px; z-index: 2147483647; background: red;';
+  const host = document.createElement('controls-host');
+  document.body.append(bar, host);
+  const root = host.attachShadow({ mode: 'open' });
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(await (await fetch('/src/styles/chrome-ui.css')).text());
+  root.adoptedStyleSheets = [sheet];
+  const menu = kit.createMenu({ root });
+  const toast = kit.createToast({ root });
+  const more = kit.moreActionsButton('Table');
+  more.style.cssText = 'position: fixed; left: 300px; top: 100px;';
+  more.addEventListener('click', () => menu.open([
+    { label: 'Copy table', run: () => toast.show('Table copied') },
+    { label: 'Search', run: () => {} },
+  ], { anchor: more }));
+  root.append(more);
+  Object.assign(window, { shadowMenu: menu, shadowToast: toast });
+}
+
+describe('in a shadow root (Chromium)', () => {
+  it('the menu goes in the root, moves with the arrow keys and gives the focus back to its button there', async () => {
+    const page = await withShadowMenuOpen();
+    assert.equal(await page.evaluate(() => /** @type {HTMLDialogElement | null | undefined} */ (document.querySelector('controls-host')?.shadowRoot?.querySelector('dialog.menu'))?.open), true, 'open, in the root');
+    assert.equal(await page.evaluate(() => document.querySelectorAll('dialog.menu').length), 1, 'the page’s own menu, and no other');
+    const inner = () => page.evaluate(() => document.querySelector('controls-host')?.shadowRoot?.activeElement?.textContent?.trim()
+      || document.querySelector('controls-host')?.shadowRoot?.activeElement?.getAttribute('aria-label'));
+    assert.equal(await inner(), 'Copy table');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await inner(), 'Search');
+    await page.keyboard.press('Escape');
+    assert.equal(await inner(), 'More actions for “Table”');
+    await page.close();
+  });
+
+  it('the toast shows in the top layer, over anything the page stacks, from a menu item', async () => {
+    const page = await withShadowMenuOpen();
+    await page.locator('controls-host').getByRole('menuitem', { name: 'Copy table' }).click();
+    const toast = page.locator('controls-host #toast');
+    assert.equal(await toast.evaluate((element) => element.matches(':popover-open')), true);
+    assert.equal(await toast.innerText(), 'Table copied');
+    const box = await toast.boundingBox();
+    assert.ok(box);
+    assert.equal(Math.round(box.x), 24, 'bottom left, 24px in');
+    assert.equal(Math.round(600 - box.y - box.height), 24);
+    const hit = await page.evaluate(({ x, y }) => {
+      const element = document.elementFromPoint(x, y);
+      return element === document.querySelector('controls-host') ? 'the controls' : element?.id;
+    }, { x: box.x + 10, y: box.y + 10 });
+    assert.equal(hit, 'the controls', 'over the page’s own z-index: 2147483647 bar');
+    await page.close();
+  });
+});
+
+describe('toast (Chromium)', () => {
+  /**
+   * A fresh page with the toast made, on a fake clock.
+   *
+   * @param {{undoLabel?: string, duration?: number, undoDuration?: number}} [options] - The toast's options (no `doc` or `root`).
+   * @returns {Promise<Page>} The page; `window.toast` is the toast, `window.undone` counts Undo runs.
+   */
+  const withToast = async (options = {}) => {
+    const page = await open();
+    // Paused, so time moves only when a test moves it.
+    await page.clock.install({ time: 0 });
+    await page.clock.pauseAt(1000);
+    await page.evaluate((given) => {
+      const { kit } = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+      Object.assign(window, { toast: kit.createToast(given), undone: 0 });
+    }, options);
+    return page;
+  };
+  /** @param {Page} page */
+  const showing = (page) => page.locator('#toast').evaluate((element) => element.matches(':popover-open'));
+  /** @param {Page} page @param {string} text @param {boolean} [undo] */
+  const show = (page, text, undo = false) => page.evaluate(({ text, undo }) => {
+    const win = /** @type {any} */ (window);
+    win.toast.show(text, undo ? () => { win.undone++; } : null);
+  }, { text, undo });
+
+  it('is a polite live region from the start, a closed manual popover until shown', async () => {
+    const page = await withToast();
+    assert.equal(await page.locator('#toast').evaluate((element) => element.outerHTML),
+      '<div id="toast" class="toast" role="status" aria-live="polite" popover="manual"><span id="toast-text"></span><button id="toast-undo" type="button" hidden="">Undo</button></div>');
+    assert.equal(await page.evaluate(() => document.body.lastElementChild?.id), 'toast');
+    assert.equal(await page.locator('#toast').isVisible(), false);
+    await page.close();
+  });
+
+  it('a page’s own toast markup, shown and hidden with `hidden`, still shows bottom left', async () => {
+    const page = await open();
+    await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div class="toast" id="own" hidden>Imported</div>'));
+    assert.equal(await page.locator('#own').isVisible(), false);
+    await page.locator('#own').evaluate((element) => { /** @type {HTMLElement} */ (element).hidden = false; });
+    const box = await page.locator('#own').boundingBox();
+    assert.ok(box);
+    assert.deepEqual([Math.round(box.x), Math.round(600 - box.y - box.height)], [24, 24]);
+    await page.close();
+  });
+
+  it('shows the message with Undo; Undo hides it and runs once', async () => {
+    const page = await withToast();
+    await show(page, 'Deleted “Research”', true);
+    assert.equal(await page.locator('#toast-text').innerText(), 'Deleted “Research”');
+    assert.equal(await showing(page), true);
+    await page.locator('#toast-undo').click();
+    assert.equal(await showing(page), false);
+    await page.locator('#toast-undo').evaluate((button) => /** @type {HTMLButtonElement} */ (button).click());
+    assert.equal(await page.evaluate(() => /** @type {any} */ (window).undone), 1);
+    await page.close();
+  });
+
+  it('goes after chrome://bookmarks’s ten seconds; a new message restarts the wait and drops the old Undo', async () => {
+    const page = await withToast();
+    await show(page, 'Deleted “Research”', true);
+    await page.clock.runFor(TOAST_MS - 1000);
+    await show(page, 'Copied');
+    assert.equal(await page.locator('#toast-undo').isVisible(), false);
+    await page.clock.runFor(TOAST_MS - 1);
+    assert.equal(await showing(page), true);
+    await page.clock.runFor(1);
+    assert.equal(await showing(page), false);
+    await page.locator('#toast-undo').evaluate((button) => /** @type {HTMLButtonElement} */ (button).click());
+    assert.equal(await page.evaluate(() => /** @type {any} */ (window).undone), 0);
+    await page.close();
+  });
+
+  it('takes its own Undo text and times, with and without Undo; hide() takes it down at once', async () => {
+    const page = await withToast({ undoLabel: 'Rückgängig', duration: 4000, undoDuration: 8000 });
+    assert.equal(await page.locator('#toast-undo').textContent(), 'Rückgängig');
+    await show(page, 'Gespeichert');
+    await page.clock.runFor(4000);
+    assert.equal(await showing(page), false);
+    await show(page, 'Gelöscht', true);
+    await page.clock.runFor(4000);
+    assert.equal(await showing(page), true);
+    await page.clock.runFor(4000);
+    assert.equal(await showing(page), false);
+    await show(page, 'Gespeichert');
+    await page.evaluate(() => /** @type {any} */ (window).toast.hide());
+    assert.equal(await showing(page), false);
+    await page.close();
+  });
+});
+
+describe('site list with an Add button (Chromium)', () => {
+  /**
+   * A fresh page with a Memory Saver–style site list: an Add button, the dialog, ⋮ menus.
+   *
+   * @returns {Promise<Page>} The page; `window.sites` is the list as stored.
+   */
+  const withSiteList = async () => {
+    const page = await open();
+    await page.evaluate(() => {
+      const { kit } = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+      document.body.insertAdjacentHTML('beforeend', '<ul class="list" id="sites"></ul><p id="none">No sites added</p><button id="add-site" type="button">Add</button>');
+      const win = /** @type {any} */ (window);
+      win.sites = ['github.com'];
+      const list = kit.createSiteList({
+        list: /** @type {HTMLElement} */ (document.getElementById('sites')),
+        empty: /** @type {HTMLElement} */ (document.getElementById('none')),
+        addButton: /** @type {HTMLElement} */ (document.getElementById('add-site')),
+        parse: kit.siteHost,
+        add: (site) => { win.sites = [...win.sites, site]; list.render(win.sites); },
+        remove: (site) => { win.sites = win.sites.filter((/** @type {string} */ s) => s !== site); list.render(win.sites); },
+        replace: (site, edited) => { win.sites = win.sites.map((/** @type {string} */ s) => (s === site ? edited : s)); list.render(win.sites); },
+      });
+      list.render(win.sites);
+    });
+    return page;
+  };
+  /** @param {Page} page */
+  const stored = (page) => page.evaluate(() => /** @type {any} */ (window).sites);
+
+  it('Add asks in the dialog, refusing what isn’t a site, and adds it as kept', async () => {
+    const page = await withSiteList();
+    assert.equal(await page.locator('#none').isVisible(), false);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add site' });
+    await page.keyboard.type('not a site');
+    assert.equal(await page.locator('#text-dialog-error').innerText(), 'Enter a site, like example.com');
+    assert.equal(await dialog.getByRole('button', { name: 'Add' }).isDisabled(), true);
+    await dialog.getByRole('textbox', { name: 'Site' }).fill('https://www.Example.com/shop');
+    await page.keyboard.press('Enter');
+    await until(async () => (await stored(page)).length === 2, 'the site added');
+    assert.deepEqual(await stored(page), ['github.com', 'example.com']);
+    assert.deepEqual(await page.locator('#sites .label').allInnerTexts(), ['github.com', 'example.com']);
+    await page.close();
+  });
+
+  it('each row’s ⋮ menu edits its site in the dialog, or removes it', async () => {
+    const page = await withSiteList();
+    await page.getByRole('button', { name: 'More actions for “github.com”' }).click();
+    assert.deepEqual(await page.getByRole('menuitem').allInnerTexts(), ['Edit', 'Remove']);
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
+    const field = page.getByRole('dialog', { name: 'Edit site' }).getByRole('textbox', { name: 'Site' });
+    assert.equal(await field.inputValue(), 'github.com');
+    await field.fill('docs.github.com');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await until(async () => (await stored(page))[0] === 'docs.github.com', 'the site edited');
+    await page.getByRole('button', { name: 'More actions for “docs.github.com”' }).click();
+    await page.getByRole('menuitem', { name: 'Remove' }).click();
+    assert.deepEqual(await stored(page), []);
+    assert.equal(await page.locator('#none').isVisible(), true);
     await page.close();
   });
 });

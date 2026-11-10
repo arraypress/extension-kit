@@ -9,6 +9,8 @@
  * @module ui/text-dialog
  */
 
+import { focusedElement } from '../dom/focus.js';
+
 /**
  * What the dialog asks.
  *
@@ -126,7 +128,7 @@ export function askText({
 }) {
   const parts = partsFor(doc);
   pending.get(doc)?.(null);
-  const active = doc.activeElement;
+  const active = focusedElement(doc);
   const back = returnTo === undefined ? (active instanceof /** @type {Window & typeof globalThis} */ (doc.defaultView).HTMLElement ? active : null) : returnTo;
 
   parts.title.textContent = title;

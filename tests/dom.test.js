@@ -2,8 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import {
-  byId, githubAboutLinks, localize, setAboutLinks, setShortcuts, statusFlasher, translator, valueRow,
+  TOOLBAR_SCHEME, byId, githubAboutLinks, localize, setAboutLinks, setShortcuts, setUpPage, statusFlasher, translator, valueRow,
 } from '../src/index.js';
+import { fakeChromeStorage, until } from '../src/testing/index.js';
 
 const page = () => new JSDOM(`<!doctype html>
   <input id="days" type="number"><span id="status" class="save-status"></span>
@@ -85,5 +86,49 @@ describe('localize', () => {
 
   it('translator substitutes', () => {
     assert.equal(translator(i18n)('hint', ['R']), 'Press R');
+  });
+});
+
+describe('setUpPage', () => {
+  /** A `chrome.i18n` that names the extension. */
+  const i18n = {
+    /** @param {string} key @param {string | string[]} [subs] */
+    getMessage: (key, subs) => ({ optionsTitle: `${[subs].flat()[0]} settings`, heading: 'Appearance' })[key] ?? '',
+    getUILanguage: () => 'en-GB',
+  };
+
+  /**
+   * A page, and `chrome` with a fake storage and a runtime that records what's sent.
+   *
+   * @param {boolean} dark - The page's scheme.
+   */
+  const setup = (dark) => {
+    const { document } = new JSDOM('<title>x</title><h2 data-i18n="heading"></h2>').window;
+    /** @type {unknown[]} */
+    const sent = [];
+    const api = { i18n, storage: fakeChromeStorage({ local: { toolbarDark: false } }), runtime: { sendMessage: async (/** @type {unknown} */ message) => { sent.push(message); } } };
+    const media = { matches: dark, addEventListener: () => {} };
+    return { document, sent, api, media };
+  };
+
+  it('localises the page, sets its title from a message, and reports its scheme for the toolbar glyph', async () => {
+    const { document, sent, api, media } = setup(true);
+    const t = setUpPage(api, { title: 'optionsTitle', substitutions: ['Upright'], doc: document, media });
+    assert.equal(document.title, 'Upright settings');
+    assert.equal(document.querySelector('h2')?.textContent, 'Appearance');
+    assert.equal(document.documentElement.lang, 'en-GB');
+    assert.equal(t('heading'), 'Appearance');
+    await until(() => sent.length, 'the scheme report', 1000);
+    assert.deepEqual(sent, [{ type: TOOLBAR_SCHEME, dark: true }]);
+  });
+
+  it('leaves the title alone without one, and only logs a scheme report that fails', async (t) => {
+    const { document, api, media } = setup(true);
+    const logged = t.mock.method(console, 'debug', () => {});
+    api.storage.local.get = async () => { throw new Error('Extension context invalidated.'); };
+    setUpPage(api, { doc: document, media });
+    assert.equal(document.title, 'x');
+    await until(() => logged.mock.callCount(), 'the failure logged', 1000);
+    assert.match(String(logged.mock.calls[0].arguments[0]), /colour scheme/);
   });
 });
