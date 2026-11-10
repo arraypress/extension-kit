@@ -1,26 +1,47 @@
 /**
- * Chrome's one-field dialog (cr-dialog with a cr-input), as chrome://bookmarks
- * asks for a folder's name: a title, a labelled field, Cancel and an action
- * button. The action button stays disabled while the text is blank or isn't
- * valid, with the reason under the field. Enter means the action button, Esc
- * and Cancel cancel, and the focus goes back to what opened it. The page
- * needs no markup: the dialog (`#text-dialog`) is made the first time.
+ * Chrome's text dialog (cr-dialog with cr-inputs): a title, labelled fields,
+ * Cancel and an action button. One field, as chrome://bookmarks asks for a
+ * folder's name (`askText`); several, as chrome://settings/searchEngines asks
+ * for a site search (`askFields`). The action button stays disabled while a
+ * field is blank or isn't valid, with the reason under that field. Enter
+ * means the action button, Esc and Cancel cancel, and the focus goes back to
+ * what opened it. The page needs no markup: the dialog (`#text-dialog`) is
+ * made the first time, its fields each time it's asked.
  *
  * @module ui/text-dialog
  */
-export type TextRequest = {
+export type FieldRequest = {
+    /**
+     * Its key in the answer ("folder"), and part of its id.
+     */
+    name: string;
+    /**
+     * Its label ("Folder").
+     */
+    label: string;
+    /**
+     * The text to start with. Default ''.
+     */
+    value?: string;
+    /**
+     * Shown while it's empty. Default none.
+     */
+    placeholder?: string;
+    /**
+     * Why the (non-blank) text can't be used,
+     * shown under the field; null when it can. Default: anything but blank.
+     */
+    validate?: (text: string) => string | null;
+    /**
+     * Its `maxlength`. Default none.
+     */
+    maxLength?: number;
+};
+export type DialogRequest = {
     /**
      * The dialog's title ("Rename folder").
      */
     title: string;
-    /**
-     * The field's label ("Name").
-     */
-    label: string;
-    /**
-     * The text to start with (selected). Default ''.
-     */
-    value?: string;
     /**
      * The action button's text. Default "Save".
      */
@@ -29,15 +50,6 @@ export type TextRequest = {
      * The cancel button's text. Default "Cancel".
      */
     cancel?: string;
-    /**
-     * Why the (non-blank) text can't be used,
-     * shown under the field; null when it can. Default: anything but blank.
-     */
-    validate?: (text: string) => string | null;
-    /**
-     * The field's `maxlength`. Default none.
-     */
-    maxLength?: number;
     /**
      * Where the focus
      * goes when it closes, or a function that says (asked then, so it can pick a row drawn since).
@@ -49,22 +61,43 @@ export type TextRequest = {
      */
     doc?: Document;
 };
+export type TextRequest = DialogRequest & Omit<FieldRequest, 'name'>;
+export type FieldsRequest = DialogRequest & {
+    fields: FieldRequest[];
+};
 /**
- * What the dialog asks.
+ * One field of the dialog.
  *
- * @typedef {object} TextRequest
- * @property {string} title The dialog's title ("Rename folder").
- * @property {string} label The field's label ("Name").
- * @property {string} [value] The text to start with (selected). Default ''.
- * @property {string} [action] The action button's text. Default "Save".
- * @property {string} [cancel] The cancel button's text. Default "Cancel".
+ * @typedef {object} FieldRequest
+ * @property {string} name Its key in the answer ("folder"), and part of its id.
+ * @property {string} label Its label ("Folder").
+ * @property {string} [value] The text to start with. Default ''.
+ * @property {string} [placeholder] Shown while it's empty. Default none.
  * @property {(text: string) => string | null} [validate] Why the (non-blank) text can't be used,
  *   shown under the field; null when it can. Default: anything but blank.
- * @property {number} [maxLength] The field's `maxlength`. Default none.
+ * @property {number} [maxLength] Its `maxlength`. Default none.
+ */
+/**
+ * What the dialog asks, whatever its fields.
+ *
+ * @typedef {object} DialogRequest
+ * @property {string} title The dialog's title ("Rename folder").
+ * @property {string} [action] The action button's text. Default "Save".
+ * @property {string} [cancel] The cancel button's text. Default "Cancel".
  * @property {HTMLElement | (() => HTMLElement | null | undefined) | null} [returnTo] Where the focus
  *   goes when it closes, or a function that says (asked then, so it can pick a row drawn since).
  *   Default what had the focus when it opened.
  * @property {Document} [doc] The page. Default `document`.
+ */
+/**
+ * What the one-field dialog asks.
+ *
+ * @typedef {DialogRequest & Omit<FieldRequest, 'name'>} TextRequest
+ */
+/**
+ * What the dialog with several fields asks.
+ *
+ * @typedef {DialogRequest & {fields: FieldRequest[]}} FieldsRequest
  */
 /**
  * Whether a text can be used, and the reason to show when it can't. Pure.
@@ -81,6 +114,20 @@ export declare function checkText(text: string, validate?: (text: string) => str
     ok: boolean;
     reason: string;
 };
+/**
+ * A field's element ids. A one-field dialog's are `text-dialog-input` and `text-dialog-error`;
+ * with several, each is named: `text-dialog-<name>` and `text-dialog-<name>-error`. Pure.
+ *
+ * @param {string} name - The field's name.
+ * @param {boolean} only - Whether it's the dialog's only field.
+ * @returns {{input: string, error: string}} The ids.
+ * @example
+ * fieldIds('folder', false); // → {input: 'text-dialog-folder', error: 'text-dialog-folder-error'}
+ */
+export declare function fieldIds(name: string, only: boolean): {
+    input: string;
+    error: string;
+};
 export type Parts = {
     /**
      * The `<dialog>`.
@@ -95,17 +142,9 @@ export type Parts = {
      */
     title: HTMLElement;
     /**
-     * The field's label.
+     * Where the fields go.
      */
-    label: HTMLLabelElement;
-    /**
-     * The field.
-     */
-    input: HTMLInputElement;
-    /**
-     * The reason under the field.
-     */
-    error: HTMLElement;
+    body: HTMLElement;
     /**
      * The cancel button.
      */
@@ -115,8 +154,39 @@ export type Parts = {
      */
     confirm: HTMLButtonElement;
 };
+export type Field = {
+    /**
+     * What was asked.
+     */
+    request: FieldRequest;
+    /**
+     * Its input.
+     */
+    input: HTMLInputElement;
+    /**
+     * The reason under it.
+     */
+    error: HTMLElement;
+};
 /**
- * Ask for a piece of text in the page's one-field dialog.
+ * Ask for several pieces of text in the page's dialog, one field each.
+ *
+ * @param {FieldsRequest} request - What to ask.
+ * @returns {Promise<Record<string, string> | null>} Each field's text by its name, trimmed; null
+ *   when cancelled.
+ * @example
+ * const rule = await askFields({
+ *   title: 'Add folder rule', action: 'Add',
+ *   fields: [
+ *     {name: 'from', label: 'Downloads from', placeholder: 'example.com or .pdf', validate: checkFrom},
+ *     {name: 'folder', label: 'Folder', placeholder: 'Receipts'},
+ *   ],
+ * });
+ * if (rule) addRule(rule.from, rule.folder);
+ */
+export declare function askFields({ title, fields: requests, action, cancel, returnTo, doc, }: FieldsRequest): Promise<Record<string, string> | null>;
+/**
+ * Ask for a piece of text in the page's dialog, with one field.
  *
  * @param {TextRequest} request - What to ask.
  * @returns {Promise<string | null>} The text, trimmed; null when cancelled.
@@ -129,4 +199,4 @@ export type Parts = {
  *   validate: (text) => (siteFromInput(text) ? null : 'Enter a site, like example.com'),
  * });
  */
-export declare function askText({ title, label, value, action, cancel, validate, maxLength, returnTo, doc, }: TextRequest): Promise<string | null>;
+export declare function askText({ label, value, placeholder, validate, maxLength, ...dialog }: TextRequest): Promise<string | null>;

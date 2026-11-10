@@ -277,6 +277,40 @@ describe('text dialog (Chromium)', () => {
     assert.equal(await page.locator('dialog#text-dialog').count(), 1, 'one dialog, made once');
     await page.close();
   });
+
+  it('with several fields: each its own reason, Add only once all are fine, the answer by name', async () => {
+    const page = await open();
+    await page.evaluate(() => {
+      /** @type {PageGlobals} */ (/** @type {unknown} */ (window)).answer = 'pending';
+      /** @type {PageGlobals} */ (/** @type {unknown} */ (window)).kit.askFields({
+        title: 'Add folder rule', action: 'Add',
+        fields: [
+          { name: 'from', label: 'Downloads from', value: 'stripe.com' },
+          { name: 'folder', label: 'Folder', placeholder: 'Receipts', validate: (text) => (text.includes('..') ? 'Choose a folder inside Downloads' : null) },
+        ],
+      }).then((answer) => { /** @type {PageGlobals} */ (/** @type {unknown} */ (window)).answer = JSON.stringify(answer); });
+    });
+    const dialog = page.getByRole('dialog', { name: 'Add folder rule' });
+    const add = dialog.getByRole('button', { name: 'Add' });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'text-dialog-folder', 'the first empty field');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Folder' }).getAttribute('placeholder'), 'Receipts');
+    assert.equal(await add.isDisabled(), true, 'Folder is still blank');
+    await page.keyboard.type('../Receipts');
+    assert.equal(await page.locator('#text-dialog-folder-error').innerText(), 'Choose a folder inside Downloads');
+    assert.equal(await page.locator('#text-dialog-from-error').isVisible(), false);
+    await page.keyboard.press('Enter');
+    assert.equal(await dialog.isVisible(), true, 'Enter does nothing while a field is wrong');
+    await dialog.getByRole('textbox', { name: 'Folder' }).fill(' Receipts ');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(JSON.parse(String(await answer(page))), { from: 'stripe.com', folder: 'Receipts' });
+    // The next one-field ask has only its own field, under the one-field ids.
+    await ask(page);
+    assert.equal(await page.locator('#text-dialog input').count(), 1);
+    assert.equal(await page.locator('#text-dialog-input').inputValue(), 'Research');
+    await page.keyboard.press('Escape');
+    assert.equal(await answer(page), null);
+    await page.close();
+  });
 });
 
 /**

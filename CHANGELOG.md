@@ -5,6 +5,17 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] — 2026-11-10
+
+### Added
+
+- **`askFields`**: the text dialog with several fields, as chrome://settings/searchEngines asks for a site search. Each field has its own label, placeholder, `validate` and reason under it; the action button waits for all of them; the answer is each field's text by `name`. The focus starts in the first empty field. `fieldIds` gives a field's element ids for tests. For Better Downloads' folder rules (“Downloads from” and “Folder”).
+- **`placeholder`** on `askText`'s field.
+
+### Changed
+
+- **`askText` is `askFields` with one field**, with the same ids (`text-dialog-input`, `text-dialog-error`, `text-dialog-confirm`); the dialog's fields are made each time it's asked, so `#text-dialog-label` is gone.
+
 ## [1.4.0] — 2026-11-10
 
 ### Added

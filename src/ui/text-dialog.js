@@ -1,10 +1,12 @@
 /**
- * Chrome's one-field dialog (cr-dialog with a cr-input), as chrome://bookmarks
- * asks for a folder's name: a title, a labelled field, Cancel and an action
- * button. The action button stays disabled while the text is blank or isn't
- * valid, with the reason under the field. Enter means the action button, Esc
- * and Cancel cancel, and the focus goes back to what opened it. The page
- * needs no markup: the dialog (`#text-dialog`) is made the first time.
+ * Chrome's text dialog (cr-dialog with cr-inputs): a title, labelled fields,
+ * Cancel and an action button. One field, as chrome://bookmarks asks for a
+ * folder's name (`askText`); several, as chrome://settings/searchEngines asks
+ * for a site search (`askFields`). The action button stays disabled while a
+ * field is blank or isn't valid, with the reason under that field. Enter
+ * means the action button, Esc and Cancel cancel, and the focus goes back to
+ * what opened it. The page needs no markup: the dialog (`#text-dialog`) is
+ * made the first time, its fields each time it's asked.
  *
  * @module ui/text-dialog
  */
@@ -12,21 +14,41 @@
 import { focusedElement } from '../dom/focus.js';
 
 /**
- * What the dialog asks.
+ * One field of the dialog.
  *
- * @typedef {object} TextRequest
- * @property {string} title The dialog's title ("Rename folder").
- * @property {string} label The field's label ("Name").
- * @property {string} [value] The text to start with (selected). Default ''.
- * @property {string} [action] The action button's text. Default "Save".
- * @property {string} [cancel] The cancel button's text. Default "Cancel".
+ * @typedef {object} FieldRequest
+ * @property {string} name Its key in the answer ("folder"), and part of its id.
+ * @property {string} label Its label ("Folder").
+ * @property {string} [value] The text to start with. Default ''.
+ * @property {string} [placeholder] Shown while it's empty. Default none.
  * @property {(text: string) => string | null} [validate] Why the (non-blank) text can't be used,
  *   shown under the field; null when it can. Default: anything but blank.
- * @property {number} [maxLength] The field's `maxlength`. Default none.
+ * @property {number} [maxLength] Its `maxlength`. Default none.
+ */
+
+/**
+ * What the dialog asks, whatever its fields.
+ *
+ * @typedef {object} DialogRequest
+ * @property {string} title The dialog's title ("Rename folder").
+ * @property {string} [action] The action button's text. Default "Save".
+ * @property {string} [cancel] The cancel button's text. Default "Cancel".
  * @property {HTMLElement | (() => HTMLElement | null | undefined) | null} [returnTo] Where the focus
  *   goes when it closes, or a function that says (asked then, so it can pick a row drawn since).
  *   Default what had the focus when it opened.
  * @property {Document} [doc] The page. Default `document`.
+ */
+
+/**
+ * What the one-field dialog asks.
+ *
+ * @typedef {DialogRequest & Omit<FieldRequest, 'name'>} TextRequest
+ */
+
+/**
+ * What the dialog with several fields asks.
+ *
+ * @typedef {DialogRequest & {fields: FieldRequest[]}} FieldsRequest
  */
 
 /**
@@ -47,21 +69,59 @@ export function checkText(text, validate = () => null) {
 }
 
 /**
- * The dialog's parts.
+ * A field's element ids. A one-field dialog's are `text-dialog-input` and `text-dialog-error`;
+ * with several, each is named: `text-dialog-<name>` and `text-dialog-<name>-error`. Pure.
+ *
+ * @param {string} name - The field's name.
+ * @param {boolean} only - Whether it's the dialog's only field.
+ * @returns {{input: string, error: string}} The ids.
+ * @example
+ * fieldIds('folder', false); // → {input: 'text-dialog-folder', error: 'text-dialog-folder-error'}
+ */
+export function fieldIds(name, only) {
+  return only
+    ? { input: 'text-dialog-input', error: 'text-dialog-error' }
+    : { input: `text-dialog-${name}`, error: `text-dialog-${name}-error` };
+}
+
+/**
+ * The dialog's lasting parts; the fields go in `body` each time.
  *
  * @typedef {object} Parts
  * @property {HTMLDialogElement} dialog The `<dialog>`.
  * @property {HTMLFormElement} form Its form.
  * @property {HTMLElement} title The title.
- * @property {HTMLLabelElement} label The field's label.
- * @property {HTMLInputElement} input The field.
- * @property {HTMLElement} error The reason under the field.
+ * @property {HTMLElement} body Where the fields go.
  * @property {HTMLButtonElement} cancel The cancel button.
  * @property {HTMLButtonElement} confirm The action button.
  */
 
+/**
+ * A field as shown.
+ *
+ * @typedef {object} Field
+ * @property {FieldRequest} request What was asked.
+ * @property {HTMLInputElement} input Its input.
+ * @property {HTMLElement} error The reason under it.
+ */
+
 /** Each page's dialog, made on first use. @type {WeakMap<Document, Parts>} */
 const made = new WeakMap();
+
+/**
+ * An element of `doc` with `attributes`.
+ *
+ * @template {keyof HTMLElementTagNameMap} K
+ * @param {Document} doc - The page.
+ * @param {K} tag - Its tag.
+ * @param {Record<string, string>} [attributes] - Its attributes.
+ * @returns {HTMLElementTagNameMap[K]} The element.
+ */
+function element(doc, tag, attributes = {}) {
+  const node = doc.createElement(tag);
+  for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+  return node;
+}
 
 /**
  * The page's dialog, made the first time.
@@ -72,90 +132,98 @@ const made = new WeakMap();
 function partsFor(doc) {
   const existing = made.get(doc);
   if (existing) return existing;
-  /**
-   * @template {keyof HTMLElementTagNameMap} K
-   * @param {K} tag
-   * @param {Record<string, string>} [attributes]
-   * @returns {HTMLElementTagNameMap[K]}
-   */
-  const el = (tag, attributes = {}) => {
-    const node = doc.createElement(tag);
-    for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
-    return node;
-  };
-  const dialog = el('dialog', { id: 'text-dialog', class: 'dialog', 'aria-labelledby': 'text-dialog-title' });
-  const form = el('form', { novalidate: '' });
-  const title = el('h2', { id: 'text-dialog-title', class: 'dialog-title' });
-  const body = el('div', { class: 'dialog-body' });
-  const field = el('div', { class: 'field' });
-  const label = el('label', { id: 'text-dialog-label', for: 'text-dialog-input' });
-  const input = el('input', { id: 'text-dialog-input', type: 'text', autocomplete: 'off', 'aria-describedby': 'text-dialog-error' });
-  const error = el('span', { id: 'text-dialog-error', class: 'hint error' });
-  error.hidden = true;
-  const buttons = el('div', { class: 'dialog-buttons' });
-  const cancel = el('button', { type: 'button', class: 'cancel' });
-  const confirm = el('button', { id: 'text-dialog-confirm', type: 'submit', class: 'action' });
-  field.append(label, input, error);
-  body.append(field);
+  const dialog = element(doc, 'dialog', { id: 'text-dialog', class: 'dialog', 'aria-labelledby': 'text-dialog-title' });
+  const form = element(doc, 'form', { novalidate: '' });
+  const title = element(doc, 'h2', { id: 'text-dialog-title', class: 'dialog-title' });
+  const body = element(doc, 'div', { class: 'dialog-body' });
+  const buttons = element(doc, 'div', { class: 'dialog-buttons' });
+  const cancel = element(doc, 'button', { type: 'button', class: 'cancel' });
+  const confirm = element(doc, 'button', { id: 'text-dialog-confirm', type: 'submit', class: 'action' });
   buttons.append(cancel, confirm);
   form.append(title, body, buttons);
   dialog.append(form);
   doc.body.append(dialog);
-  const parts = { dialog, form, title, label, input, error, cancel, confirm };
+  const parts = { dialog, form, title, body, cancel, confirm };
   made.set(doc, parts);
   return parts;
 }
 
-/** The open dialog's settle function, per page. @type {WeakMap<Document, (text: string | null) => void>} */
+/**
+ * A field's label, input and reason, as cr-input lays them out.
+ *
+ * @param {Document} doc - The page.
+ * @param {FieldRequest} request - The field.
+ * @param {boolean} only - Whether it's the dialog's only field.
+ * @returns {{row: HTMLElement, field: Field}} Its markup, and the parts to read.
+ */
+function fieldFor(doc, request, only) {
+  const ids = fieldIds(request.name, only);
+  const row = element(doc, 'div', { class: 'field' });
+  const label = element(doc, 'label', { for: ids.input });
+  label.textContent = request.label;
+  const input = element(doc, 'input', { id: ids.input, type: 'text', autocomplete: 'off', 'aria-describedby': ids.error });
+  input.value = request.value ?? '';
+  if (request.placeholder) input.placeholder = request.placeholder;
+  if (request.maxLength !== undefined) input.maxLength = request.maxLength;
+  const error = element(doc, 'span', { id: ids.error, class: 'hint error' });
+  error.hidden = true;
+  row.append(label, input, error);
+  return { row, field: { request, input, error } };
+}
+
+/** The open dialog's settle function, per page. @type {WeakMap<Document, (answer: Record<string, string> | null) => void>} */
 const pending = new WeakMap();
 
 /**
- * Ask for a piece of text in the page's one-field dialog.
+ * Ask for several pieces of text in the page's dialog, one field each.
  *
- * @param {TextRequest} request - What to ask.
- * @returns {Promise<string | null>} The text, trimmed; null when cancelled.
+ * @param {FieldsRequest} request - What to ask.
+ * @returns {Promise<Record<string, string> | null>} Each field's text by its name, trimmed; null
+ *   when cancelled.
  * @example
- * const name = await askText({title: 'Rename workspace', label: 'Name', value: workspace.name, maxLength: 200});
- * if (name) rename(workspace, name);
- *
- * const site = await askText({
- *   title: 'Add site', label: 'Site', action: 'Add',
- *   validate: (text) => (siteFromInput(text) ? null : 'Enter a site, like example.com'),
+ * const rule = await askFields({
+ *   title: 'Add folder rule', action: 'Add',
+ *   fields: [
+ *     {name: 'from', label: 'Downloads from', placeholder: 'example.com or .pdf', validate: checkFrom},
+ *     {name: 'folder', label: 'Folder', placeholder: 'Receipts'},
+ *   ],
  * });
+ * if (rule) addRule(rule.from, rule.folder);
  */
-export function askText({
-  title, label, value = '', action = 'Save', cancel = 'Cancel', validate, maxLength, returnTo, doc = document,
+export function askFields({
+  title, fields: requests, action = 'Save', cancel = 'Cancel', returnTo, doc = document,
 }) {
   const parts = partsFor(doc);
   pending.get(doc)?.(null);
   const active = focusedElement(doc);
   const back = returnTo === undefined ? (active instanceof /** @type {Window & typeof globalThis} */ (doc.defaultView).HTMLElement ? active : null) : returnTo;
 
+  const built = requests.map((request) => fieldFor(doc, request, requests.length === 1));
+  const fields = built.map(({ field }) => field);
+  parts.body.replaceChildren(...built.map(({ row }) => row));
   parts.title.textContent = title;
-  parts.label.textContent = label;
   parts.confirm.textContent = action;
   parts.cancel.textContent = cancel;
-  parts.input.value = value;
-  if (maxLength === undefined) parts.input.removeAttribute('maxlength');
-  else parts.input.maxLength = maxLength;
 
-  const refresh = () => {
-    const { ok, reason } = checkText(parts.input.value, validate);
-    parts.error.textContent = reason;
-    parts.error.hidden = !reason;
-    parts.confirm.disabled = !ok;
+  const allOk = () => fields.every(({ input, request }) => checkText(input.value, request.validate).ok);
+  /** @param {Field} field */
+  const refresh = ({ input, error, request }) => {
+    const { reason } = checkText(input.value, request.validate);
+    error.textContent = reason;
+    error.hidden = !reason;
   };
-  refresh();
+  for (const field of fields) refresh(field);
+  parts.confirm.disabled = !allOk();
 
   return new Promise((resolve) => {
     const controller = new AbortController();
     const { signal } = controller;
-    /** @param {string | null} text */
-    const settle = (text) => {
+    /** @param {Record<string, string> | null} answer */
+    const settle = (answer) => {
       controller.abort();
       pending.delete(doc);
       if (parts.dialog.open) parts.dialog.close();
-      resolve(text);
+      resolve(answer);
       // After whatever the answer re-renders, unless another dialog opened meanwhile.
       queueMicrotask(() => {
         if (doc.querySelector('dialog[open]')) return;
@@ -164,11 +232,16 @@ export function askText({
       });
     };
     pending.set(doc, settle);
-    parts.input.addEventListener('input', refresh, { signal });
+    for (const field of fields) {
+      field.input.addEventListener('input', () => {
+        refresh(field);
+        parts.confirm.disabled = !allOk();
+      }, { signal });
+    }
     // Enter submits through the action button (the form's only submit button), never while it's disabled.
     parts.form.addEventListener('submit', (event) => {
       event.preventDefault();
-      if (checkText(parts.input.value, validate).ok) settle(parts.input.value.trim());
+      if (allOk()) settle(Object.fromEntries(fields.map(({ request, input }) => [request.name, input.value.trim()])));
     }, { signal });
     parts.cancel.addEventListener('click', () => settle(null), { signal });
     parts.dialog.addEventListener('keydown', (event) => {
@@ -182,6 +255,28 @@ export function askText({
     }, { signal });
 
     parts.dialog.showModal();
-    parts.input.select();
+    // The first field still to fill in, or the first, its text selected to type over.
+    (fields.find(({ input }) => !input.value) ?? fields[0])?.input.select();
   });
+}
+
+/**
+ * Ask for a piece of text in the page's dialog, with one field.
+ *
+ * @param {TextRequest} request - What to ask.
+ * @returns {Promise<string | null>} The text, trimmed; null when cancelled.
+ * @example
+ * const name = await askText({title: 'Rename workspace', label: 'Name', value: workspace.name, maxLength: 200});
+ * if (name) rename(workspace, name);
+ *
+ * const site = await askText({
+ *   title: 'Add site', label: 'Site', action: 'Add',
+ *   validate: (text) => (siteFromInput(text) ? null : 'Enter a site, like example.com'),
+ * });
+ */
+export async function askText({
+  label, value, placeholder, validate, maxLength, ...dialog
+}) {
+  const answer = await askFields({ ...dialog, fields: [{ name: 'input', label, value, placeholder, validate, maxLength }] });
+  return answer?.input ?? null;
 }

@@ -10,8 +10,8 @@ The pieces ArrayPress's Chrome extensions share, so each is written once:
   service worker shows the matching icon.
 - **About links**: README, Issues and PRIVACY.md in the extension's GitHub repository, plus
   package-time warnings for placeholder links.
-- **Chrome's page components**: the ⋮ action menu and its row button, the one-field dialog
-  ("Rename folder"), the toast with Undo and a settings card's site list, built on the
+- **Chrome's page components**: the ⋮ action menu and its row button, the text dialog
+  ("Rename folder", or several fields as "Add site search"), the toast with Undo and a settings card's site list, built on the
   stylesheet's classes; they work in a content script's shadow root too.
 - **Sites**: what people type into a per-site list, and whether a page is on one.
 - **Build and test helpers** (Node): icon rendering, vendoring npm packages (with a staleness
@@ -238,7 +238,7 @@ opens it below the button instead. `menuPosition` and `isInside` are the pure ge
 `tooltip` (a `title`) and `focusable: false` (out of the tab order, for a row that takes the focus)
 cover the rest.
 
-### One-field dialog (cr-dialog)
+### Text dialog (cr-dialog)
 
 ```js
 const name = await askText({ title: 'Rename workspace', label: 'Name', value: workspace.name, maxLength: 200 });
@@ -253,6 +253,26 @@ disabled while the text is blank or `validate` gives a reason, which shows under
 (`checkText` is that rule, pure). Enter presses the action button; Esc and Cancel cancel; the
 focus goes back to what had it, or to `returnTo` (an element, or a function asked at the end).
 One `#text-dialog` per page, made on first use.
+
+### Dialog with several fields
+
+```js
+const rule = await askFields({
+  title: 'Add folder rule', action: 'Add',
+  fields: [
+    { name: 'from', label: 'Downloads from', placeholder: 'example.com or .pdf', validate: checkFrom },
+    { name: 'folder', label: 'Folder', value: 'Receipts' },
+  ],
+});
+if (rule) addRule(rule.from, rule.folder);
+```
+
+The same dialog as chrome://settings/searchEngines asks for a site search: a field each, in
+order. Resolves to each field's text by its `name`, trimmed, or `null` when cancelled. The action
+button stays disabled until every field is filled in and valid, each field's reason under it; the
+focus starts in the first empty field. `askText` is this with one field. A one-field dialog's ids
+are `text-dialog-input` and `text-dialog-error`; with several, `text-dialog-<name>` and
+`text-dialog-<name>-error` (`fieldIds`), for a test to find them.
 
 ### Toast with Undo (cr-toast)
 
@@ -387,7 +407,7 @@ except those listed, each with a reason:
 | Manager layout | `.manager`/`.layout`, `.sidebar` with `.tree` > `.tree-item`, `.main` with `.list-card` |
 | Menu (cr-action-menu) | `<dialog class="menu">` of `button[role="menuitem"]`, `hr` (or `createMenu`) |
 | ⋮ icon | `<span class="icon icon-more-vert" aria-hidden="true">` (or `moreActionsButton`) |
-| Dialog (cr-dialog) | `<dialog class="dialog"><form method="dialog">` `.dialog-title`, `.dialog-body`, `.dialog-buttons` (one field: `askText`) |
+| Dialog (cr-dialog) | `<dialog class="dialog"><form method="dialog">` `.dialog-title`, `.dialog-body`, `.dialog-buttons` (`askText`, `askFields`) |
 | Toast (cr-toast) | `<div class="toast" popover="manual">text <button>Undo</button></div>` (or `createToast`); with `hidden` instead of `popover`, it shows over the page but not the top layer |
 | Drawer (cr-drawer) | `<dialog class="drawer">` with `.drawer-head` and a `.nav` |
 | Side panel page | `<body class="side-panel">`: the panel's colours, a column 100vh high |

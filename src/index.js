@@ -32,7 +32,7 @@ export {
 } from './toolbar/theme.js';
 export { MENU_EDGE, createMenu, isInside, menuPosition, moreActionsButton } from './ui/menu.js';
 export { SITE_LIST_MESSAGES, SITE_LIST_WORDS, createSiteList } from './ui/site-list.js';
-export { askText, checkText } from './ui/text-dialog.js';
+export { askFields, askText, checkText, fieldIds } from './ui/text-dialog.js';
 export { TOAST_MS, createToast } from './ui/toast.js';
 
 /**
@@ -43,6 +43,8 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem
  * @typedef {import('./ui/menu.js').MenuPlace} MenuPlace
  * @typedef {import('./ui/site-list.js').SiteList} SiteList
+ * @typedef {import('./ui/text-dialog.js').FieldRequest} FieldRequest
+ * @typedef {import('./ui/text-dialog.js').FieldsRequest} FieldsRequest
  * @typedef {import('./ui/text-dialog.js').TextRequest} TextRequest
  * @typedef {import('./ui/toast.js').Toast} Toast
  */

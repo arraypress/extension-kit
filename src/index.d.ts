@@ -27,13 +27,15 @@ export { DARK_QUERY, TOOLBAR_DARK_KEY, TOOLBAR_SCHEME, reportColorScheme, scheme
 export { OFFSCREEN_PATH, TOOLBAR_ICON_DIR, createToolbarTheme, startToolbarTheme, toolbarIcon, watchFromOffscreen, } from './toolbar/theme.js';
 export { MENU_EDGE, createMenu, isInside, menuPosition, moreActionsButton } from './ui/menu.js';
 export { SITE_LIST_MESSAGES, SITE_LIST_WORDS, createSiteList } from './ui/site-list.js';
-export { askText, checkText } from './ui/text-dialog.js';
+export { askFields, askText, checkText, fieldIds } from './ui/text-dialog.js';
 export { TOAST_MS, createToast } from './ui/toast.js';
 export type ActionMenu = import('./ui/menu.js').ActionMenu;
 export type MenuEntry = import('./ui/menu.js').MenuEntry;
 export type MenuItem = import('./ui/menu.js').MenuItem;
 export type MenuPlace = import('./ui/menu.js').MenuPlace;
 export type SiteList = import('./ui/site-list.js').SiteList;
+export type FieldRequest = import('./ui/text-dialog.js').FieldRequest;
+export type FieldsRequest = import('./ui/text-dialog.js').FieldsRequest;
 export type TextRequest = import('./ui/text-dialog.js').TextRequest;
 export type Toast = import('./ui/toast.js').Toast;
 /**
@@ -44,6 +46,8 @@ export type Toast = import('./ui/toast.js').Toast;
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem
  * @typedef {import('./ui/menu.js').MenuPlace} MenuPlace
  * @typedef {import('./ui/site-list.js').SiteList} SiteList
+ * @typedef {import('./ui/text-dialog.js').FieldRequest} FieldRequest
+ * @typedef {import('./ui/text-dialog.js').FieldsRequest} FieldsRequest
  * @typedef {import('./ui/text-dialog.js').TextRequest} TextRequest
  * @typedef {import('./ui/toast.js').Toast} Toast
  */
