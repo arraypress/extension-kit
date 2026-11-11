@@ -160,6 +160,22 @@ describe('settings saver', () => {
     assert.ok(results.includes(false));
   });
 
+  it('follow: a change made elsewhere comes with this page’s unwritten changes laid over it', async () => {
+    const storage = fakeChromeStorage();
+    const saver = createSettingsSaver(store, storage, { delay: 10_000 });
+    /** @type {unknown[]} */
+    const heard = [];
+    saver.follow((settings) => heard.push(settings), storage.onChanged);
+    saver.save({ days: 3 });
+    await storage.sync.set({ theme: 'dark' });
+    await storage.settled();
+    await storage.local.set({ unrelated: 1 });
+    await storage.settled();
+    assert.equal(heard.length, 1);
+    assert.deepEqual(heard[0], { ...store.normalize({ theme: 'dark' }), days: 3 });
+    saver.stop();
+  });
+
   it('flush() writes at once (the page is closing)', async () => {
     const storage = fakeChromeStorage();
     const saver = createSettingsSaver(store, storage, { delay: 10_000 });

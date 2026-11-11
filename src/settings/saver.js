@@ -27,6 +27,10 @@
  * @property {() => Promise<unknown>} flush Write what's queued now (call it as the page is hidden);
  *   resolves once every write so far has finished.
  * @property {() => void} stop Cancel the timers (tests, or a page being torn down).
+ * @property {(onChange: (settings: S) => void, events: {addListener(listener: (changes: Record<string, import('./storage.js').StorageChange>, area: string) => void): void}) => void} follow
+ *   Hear the settings change elsewhere (another tab, another computer through sync):
+ *   `onChange` gets them all, this page's changes not yet written laid over them. `events` is
+ *   `chrome.storage.onChanged`.
  */
 
 /**
@@ -41,6 +45,7 @@
  * const saver = createSettingsSaver(store, chrome.storage, { onSaved: showSaved });
  * toggle.addEventListener('change', () => saver.save({ compact: toggle.checked }));
  * addEventListener('pagehide', () => saver.flush());
+ * saver.follow((settings) => show(settings), chrome.storage.onChanged);
  */
 export function createSettingsSaver(store, storage, { delay = 1000, retryAfter = 60_000, onSaved = () => {} } = {}) {
   /** @type {Partial<S>} */
@@ -90,6 +95,12 @@ export function createSettingsSaver(store, storage, { delay = 1000, retryAfter =
       timer = setTimeout(flush, delay);
     },
     flush,
+    follow(onChange, events) {
+      events.addListener(async (changes, area) => {
+        if (!store.changed(changes, area).length) return;
+        onChange(store.normalize({ ...(await store.load(storage)), ...pending }));
+      });
+    },
     stop() {
       clearTimeout(timer);
       clearTimeout(retryTimer);

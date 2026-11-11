@@ -41,6 +41,14 @@ export type SettingsSaver<S extends Record<string, unknown>> = {
      * Cancel the timers (tests, or a page being torn down).
      */
     stop: () => void;
+    /**
+     *   Hear the settings change elsewhere (another tab, another computer through sync):
+     *   `onChange` gets them all, this page's changes not yet written laid over them. `events` is
+     *   `chrome.storage.onChanged`.
+     */
+    follow: (onChange: (settings: S) => void, events: {
+        addListener(listener: (changes: Record<string, import('./storage.js').StorageChange>, area: string) => void): void;
+    }) => void;
 };
 /** @import { SettingsStore } from './store.js' */
 /** @import { SyncedStorage } from './storage.js' */
@@ -59,6 +67,10 @@ export type SettingsSaver<S extends Record<string, unknown>> = {
  * @property {() => Promise<unknown>} flush Write what's queued now (call it as the page is hidden);
  *   resolves once every write so far has finished.
  * @property {() => void} stop Cancel the timers (tests, or a page being torn down).
+ * @property {(onChange: (settings: S) => void, events: {addListener(listener: (changes: Record<string, import('./storage.js').StorageChange>, area: string) => void): void}) => void} follow
+ *   Hear the settings change elsewhere (another tab, another computer through sync):
+ *   `onChange` gets them all, this page's changes not yet written laid over them. `events` is
+ *   `chrome.storage.onChanged`.
  */
 /**
  * Make a debounced saver over a settings store.
@@ -72,5 +84,6 @@ export type SettingsSaver<S extends Record<string, unknown>> = {
  * const saver = createSettingsSaver(store, chrome.storage, { onSaved: showSaved });
  * toggle.addEventListener('change', () => saver.save({ compact: toggle.checked }));
  * addEventListener('pagehide', () => saver.flush());
+ * saver.follow((settings) => show(settings), chrome.storage.onChanged);
  */
 export declare function createSettingsSaver<S extends Record<string, unknown>>(store: SettingsStore<S>, storage: SyncedStorage, { delay, retryAfter, onSaved }?: SaverOptions<S>): SettingsSaver<S>;

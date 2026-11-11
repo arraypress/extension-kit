@@ -110,6 +110,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 const saver = createSettingsSaver(store, chrome.storage, { onSaved: showSaved });
 saver.save({ menuStyle: 'full' });
 addEventListener('pagehide', () => saver.flush());
+// Changed in another tab or on another computer: shown, with this page's unwritten changes over it.
+saver.follow((settings) => show(settings), chrome.storage.onChanged);
 ```
 
 | Store member | What it does |
