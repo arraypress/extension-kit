@@ -24,8 +24,10 @@ export { BLOCK_CHARS, SLICE_MS, blocksOf, eachInSlices, inSlices } from './conte
 export { MAX_ELEMENTS, otherSiteFrames, renderedElements, shadowRootOf } from './content/elements.js';
 export { HIGHLIGHT_CSS, MAX_BOXES, createHighlighter } from './content/highlight.js';
 export { pageOverlay } from './content/overlay.js';
+export { PAGE_TOAST_MS, showPageToast } from './content/page-toast.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { copyText } from './dom/clipboard.js';
+export { copyFormats } from './dom/copy.js';
 export { focusedElement } from './dom/focus.js';
 export { iconButton, make, spriteIcon } from './dom/make.js';
 export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
@@ -70,6 +72,7 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./content/slices.js').SliceOptions} SliceOptions
  * @typedef {import('./content/highlight.js').Highlighter} Highlighter
  * @typedef {import('./content/overlay.js').PageOverlay} PageOverlay
+ * @typedef {import('./dom/copy.js').ClipboardFormats} ClipboardFormats
  * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers
  * @typedef {import('./frame/window.js').Tab} WindowTab
  * @typedef {import('./frame/window.js').Theme} WindowTheme

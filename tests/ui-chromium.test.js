@@ -5,8 +5,10 @@
  * overlay and “Show on page” boxes too, where the page's styles, the overlay's
  * inline reset and layout are real: the host's own styles (`hostStyle`) beat
  * the reset a plain `:host` rule loses to; boxes follow their elements, stay
- * within the window, and go with Esc. The kit's own modules and stylesheet are served to a page
- * and driven with real keys and clicks.
+ * within the window, and go with Esc. Copying in two formats (the real clipboard read back, the
+ * copy command where the API is refused, the page's own copy listener kept out) and the page
+ * toast in the top layer. The kit's own modules and stylesheet are served to a page and driven
+ * with real keys and clicks.
  *
  * @module tests/ui-chromium
  */
@@ -80,6 +82,26 @@ const CONTENT_PAGE = `<!doctype html>
 </script>
 </body></html>`;
 
+/** A page with a button that copies, a page script that rewrites copies, and its highest fixed layer to cover. */
+const COPY_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body>
+<p id="text">Some page text</p><button id="copy">Copy</button>
+<div id="cover" hidden style="position: fixed; inset: 0; z-index: 2147483647; background: white"></div>
+<script type="module">
+  import * as kit from '/src/index.js';
+  window.kit = kit;
+  // A page that adds "Read more at…" to every copy, as some news sites do.
+  document.addEventListener('copy', (event) => { event.clipboardData.setData('text/plain', 'Read more at example.com'); event.preventDefault(); });
+  document.getElementById('copy').addEventListener('click', async () => {
+    window.copied = await kit.copyFormats(document, window.toCopy);
+  });
+  // Loaded with ?auto: a copy with no click at all, the clipboard API taken away.
+  if (location.search === '?auto') {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined });
+    window.copied = await kit.copyFormats(document, { text: 'no click' });
+  }
+  window.ready = true;
+</script></body></html>`;
+
 /** @type {TestServer} */
 let site;
 /** @type {Browser} */
@@ -89,6 +111,7 @@ before(async () => {
   site = await serve(async (pathname) => {
     if (pathname === '/') return PAGE;
     if (pathname === '/content') return CONTENT_PAGE;
+    if (pathname === '/copy') return COPY_PAGE;
     const file = path.join(SRC, path.normalize(pathname.replace(/^\/src\//, '')));
     if (!file.startsWith(SRC)) return undefined;
     const body = await readFile(file).catch(() => undefined);
@@ -756,6 +779,142 @@ describe('otherSiteFrames (Chromium)', () => {
       return kit.otherSiteFrames(document);
     }, site.origin);
     assert.deepEqual(sites, ['https://ads.example.net', 'https://video.example.com']);
+    await page.close();
+  });
+});
+
+/** A browser context allowed the clipboard on the test site, as Chrome allows the active tab. */
+/** @type {import('playwright').BrowserContext | undefined} */
+let clipboardContext;
+
+/**
+ * A fresh copy page with the kit, focused, in a context allowed the clipboard.
+ *
+ * @param {string} [query] - The address's query.
+ * @returns {Promise<Page>} The page.
+ */
+async function openCopyPage(query = '') {
+  if (!clipboardContext) {
+    clipboardContext = await browser.newContext();
+    await clipboardContext.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: site.origin });
+  }
+  const page = await clipboardContext.newPage();
+  await page.goto(`${site.origin}/copy${query}`);
+  await page.waitForFunction(() => /** @type {any} */ (window).ready);
+  await page.bringToFront();
+  return page;
+}
+
+/**
+ * What's on the clipboard, in both formats.
+ *
+ * @param {Page} page - A page allowed to read it.
+ * @returns {Promise<{text: string, html: string | null}>} Plain text and HTML (null when there's none).
+ */
+const readClipboard = (page) => page.evaluate(async () => {
+  const [item] = await navigator.clipboard.read();
+  const text = item.types.includes('text/plain') ? await (await item.getType('text/plain')).text() : '';
+  const html = item.types.includes('text/html') ? await (await item.getType('text/html')).text() : null;
+  return { text, html };
+});
+
+/**
+ * The text of the page's status regions as a screen reader finds them, through Chrome's
+ * accessibility tree (the toast's closed shadow root is out of Playwright's reach).
+ *
+ * @param {Page} page - The page.
+ * @returns {Promise<string>} The text inside status regions.
+ */
+async function statusText(page) {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { nodes } = /** @type {{nodes: {nodeId: string, parentId?: string, role?: {value: string}, name?: {value: string}}[]}} */ (
+      await cdp.send('Accessibility.getFullAXTree'));
+    const byId = new Map(nodes.map((node) => [node.nodeId, node]));
+    /** @param {{parentId?: string}} node @returns {boolean} */
+    const inStatus = (node) => {
+      for (let up = node.parentId && byId.get(node.parentId); up; up = up.parentId && byId.get(up.parentId)) if (up.role?.value === 'status') return true;
+      return false;
+    };
+    return nodes.filter((node) => node.role?.value === 'StaticText' && inStatus(node)).map((node) => node.name?.value ?? '').join('');
+  } finally {
+    await cdp.detach();
+  }
+}
+
+describe('copyFormats in Chromium', () => {
+  it('puts plain text and HTML on the clipboard as one item, without a click', async () => {
+    const page = await openCopyPage();
+    const copied = await page.evaluate(() => /** @type {any} */ (window).kit.copyFormats(document, { text: 'Title – https://example.com/', html: '<a href="https://example.com/">Title</a>' }));
+    assert.equal(copied, true);
+    const { text, html } = await readClipboard(page);
+    assert.equal(text, 'Title – https://example.com/');
+    assert.match(String(html), /<a href="https:\/\/example\.com\/">Title<\/a>/);
+    await page.close();
+  });
+
+  it('plain text alone has no HTML', async () => {
+    const page = await openCopyPage();
+    assert.equal(await page.evaluate(() => /** @type {any} */ (window).kit.copyFormats(document, { text: '# Markdown' })), true);
+    assert.deepEqual(await readClipboard(page), { text: '# Markdown', html: null });
+    await page.close();
+  });
+
+  it('without the clipboard API, the copy command from a click writes both, and the page’s own copy listener can’t change them', async () => {
+    const page = await openCopyPage();
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined });
+      /** @type {any} */ (window).toCopy = { text: 'plain', html: '<b>rich</b>' };
+    });
+    await page.click('#copy');
+    await until(() => page.evaluate(() => /** @type {any} */ (window).copied !== undefined), 'the copy');
+    assert.equal(await page.evaluate(() => /** @type {any} */ (window).copied), true);
+    const reader = await openCopyPage();
+    const { text, html } = await readClipboard(reader);
+    assert.equal(text, 'plain');
+    assert.match(String(html), /<b>rich<\/b>/);
+    await reader.close();
+    await page.close();
+  });
+
+  it('without the clipboard API or a click, it says it couldn’t', async () => {
+    // Playwright's evaluate counts as a click, so the page copies by itself as it loads.
+    const page = await openCopyPage('?auto');
+    assert.equal(await page.evaluate(() => /** @type {any} */ (window).copied), false);
+    await page.close();
+  });
+});
+
+describe('showPageToast in Chromium', () => {
+  it('shows the words in the top layer, over the page’s highest fixed layer, then goes; a new one replaces it', async () => {
+    const page = await openCopyPage();
+    await page.evaluate(() => {
+      /** @type {HTMLElement} */ (document.getElementById('cover')).hidden = false;
+      const { kit } = /** @type {any} */ (window);
+      kit.showPageToast(document, 'First', { name: 'kit-test-toast', ms: 60_000 });
+      kit.showPageToast(document, 'Link copied', { name: 'kit-test-toast', ms: 400 });
+    });
+    const state = await page.evaluate(() => {
+      const hosts = document.querySelectorAll('kit-test-toast');
+      // What's drawn at the toast's middle: in the top layer, the host (the shadow root's), not the cover.
+      const box = { x: innerWidth / 2, y: innerHeight - 48 };
+      return { hosts: hosts.length, top: document.elementFromPoint(box.x, box.y)?.localName };
+    });
+    assert.equal(state.hosts, 1);
+    assert.equal(state.top, 'kit-test-toast');
+    assert.equal(await statusText(page), 'Link copied');
+    await until(() => page.evaluate(() => !document.querySelector('kit-test-toast')), 'the toast to go', 3000);
+    await page.close();
+  });
+
+  it('the function it returns takes it away at once', async () => {
+    const page = await openCopyPage();
+    const left = await page.evaluate(() => {
+      const hide = /** @type {any} */ (window).kit.showPageToast(document, 'Copied', { name: 'kit-test-toast' });
+      hide();
+      return document.querySelectorAll('kit-test-toast').length;
+    });
+    assert.equal(left, 0);
     await page.close();
   });
 });
