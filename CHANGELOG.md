@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Chrome's window around a capture** (`frame/window.js`, in the runtime half): `windowChrome`, `THEMES`, `letterIcon` moved there from `build/store-frame.js` (which re-exports them), plus `windowChromeSvg` (the tab strip and toolbar as an SVG image an extension page draws on a canvas, sharp at any scale; Chrome doesn't taint the canvas) and `WINDOW_BARS`/`WINDOW_W`. Better Screenshots draws it around a capture; the store screenshots use the same drawing. The markup's `<img>`s are self-closed so it parses as XML.
+- **`playPermissionPrompt`** (`/testing`): Chrome's permission prompt played in a page for an e2e test, moved from Topicless' e2e helpers so Better Screenshots shares it (Topicless can switch to it).
 
 ## [1.7.0] — 2026-11-11
 

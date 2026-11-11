@@ -104,3 +104,35 @@ describe('a browser that downloads for real', () => {
     }
   });
 });
+
+describe('playPermissionPrompt (Chromium)', () => {
+  it('records each request (and that a click was behind it), and answers in order, the last kept', async () => {
+    const { playPermissionPrompt } = await import('../src/testing/index.js');
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent('<button id="b">Ask</button>');
+      // A page has no chrome.permissions: stand one in, as an extension page has.
+      await page.evaluate(() => { Object.assign(window, { chrome: { permissions: { request: async () => { throw new Error('real prompt'); } } } }); });
+      await page.evaluate(playPermissionPrompt, [true, false]);
+      await page.evaluate(() => document.getElementById('b')?.addEventListener('click', () => {
+        const w = /** @type {any} */ (window);
+        w.answers = w.answers ?? [];
+        chrome.permissions.request({ permissions: ['downloads'] }).then((answer) => w.answers.push(answer));
+      }));
+      await page.click('#b');
+      const third = await page.evaluate(() => chrome.permissions.request({ origins: ['https://example.com/*'] }));
+      await page.click('#b');
+      await page.waitForFunction(() => /** @type {any} */ (window).answers?.length === 2);
+      assert.deepEqual(await page.evaluate(() => /** @type {any} */ (window).answers), [true, false]);
+      assert.equal(third, false);
+      assert.deepEqual(await page.evaluate(() => /** @type {any} */ (window).asked), [
+        { permissions: ['downloads'], origins: undefined, gesture: true },
+        { permissions: undefined, origins: ['https://example.com/*'], gesture: true },
+        { permissions: ['downloads'], origins: undefined, gesture: true },
+      ]);
+    } finally {
+      await browser.close();
+    }
+  });
+});
