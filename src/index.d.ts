@@ -2,7 +2,7 @@
  * The kit's browser half: what an extension's pages, offscreen document,
  * service worker and content scripts load, Chrome's page components (the ⋮
  * menu, the text dialog, the toast with Undo, a settings card's site list,
- * the built-in AI row), per-site lists' sites, Chrome's on-device model, and
+ * the built-in AI row), Chrome's window drawn around a capture, per-site lists' sites, Chrome's on-device model, and
  * a content script's slices and change watcher included. Every function takes the `chrome`
  * APIs it uses as arguments, so tests run the real logic against fakes.
  *
@@ -18,6 +18,7 @@ export { setShortcuts } from './commands/shortcuts.js';
 export { BLOCK_CHARS, SLICE_MS, blocksOf, inSlices } from './content/slices.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { focusedElement } from './dom/focus.js';
+export { THEMES, WINDOW_BARS, WINDOW_W, letterIcon, windowChrome, windowChromeSvg } from './frame/window.js';
 export { localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
@@ -46,6 +47,8 @@ export type ModelSession = import('./ai/model.js').ModelSession;
 export type ModelStatus = import('./ai/model.js').ModelStatus;
 export type SliceOptions = import('./content/slices.js').SliceOptions;
 export type WatchHandlers = import('./content/watch.js').WatchHandlers;
+export type WindowTab = import('./frame/window.js').Tab;
+export type WindowTheme = import('./frame/window.js').Theme;
 export type ModelRow = import('./ui/model-row.js').ModelRow;
 export type ContentScript = import('./scripting/registration.js').ContentScript;
 export type ActionMenu = import('./ui/menu.js').ActionMenu;
@@ -70,6 +73,8 @@ export type Toast = import('./ui/toast.js').Toast;
  * @typedef {import('./ai/model.js').ModelStatus} ModelStatus
  * @typedef {import('./content/slices.js').SliceOptions} SliceOptions
  * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers
+ * @typedef {import('./frame/window.js').Tab} WindowTab
+ * @typedef {import('./frame/window.js').Theme} WindowTheme
  * @typedef {import('./ui/model-row.js').ModelRow} ModelRow
  * @typedef {import('./scripting/registration.js').ContentScript} ContentScript
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu

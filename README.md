@@ -13,6 +13,8 @@ The pieces ArrayPress's Chrome extensions share, so each is written once:
 - **Chrome's page components**: the ⋮ action menu and its row button, the text dialog
   ("Rename folder", or several fields as "Add site search"), the toast with Undo and a settings card's site list, built on the
   stylesheet's classes; they work in a content script's shadow root too.
+- **Chrome's window around a capture**: the tab strip and toolbar, light or dark, as HTML for store
+  screenshots and as an SVG image an extension page draws on a canvas.
 - **Sites**: what people type into a per-site list, and whether a page is on one.
 - **Chrome's on-device model** (Gemini Nano, the Prompt API): availability, a download from the
   person's click with progress, one base session with a `clone()` per question, a time limit on
@@ -182,6 +184,25 @@ takes it as a placeholder whose content is `$1`, and every lookup without substi
 ```html
 <h2 class="section-title" data-i18n="optionsAbout"></h2> <!-- About Upright -->
 ```
+
+## Chrome's window around a capture
+
+```js
+import { WINDOW_BARS, letterIcon, windowChromeSvg } from '../vendor/extension-kit/index.js';
+
+const svg = windowChromeSvg({ tabs: [{ title: 'Example', icon: letterIcon('E', '#1a73e8'), active: true }], url: 'example.com/a', theme: 'dark', w: 1280 });
+const bars = new Image();
+bars.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+await bars.decode();
+context.drawImage(bars, 0, 0, 1280 * scale, (WINDOW_BARS.strip + WINDOW_BARS.toolbar) * scale); // the capture goes below
+```
+
+The same macOS window the store screenshots use (`storeFrame.windowChrome`, now `frame/window.js`
+in the runtime half): `windowChrome(options)` is its HTML, `windowChromeSvg(options)` that HTML in
+an SVG image `w` wide and `WINDOW_BARS.strip + WINDOW_BARS.toolbar` (88px) high, drawn sharp at any
+scale. Chrome draws an SVG image with HTML inside (`foreignObject`) without tainting the canvas
+(checked in Chromium, `tests/frame-chromium.test.js`). Images in it must be `data:` URLs
+(`letterIcon` makes one). `THEMES` holds the light and dark colours.
 
 ## Sites
 
@@ -456,7 +477,7 @@ A list with an Add button needs every key but `optionsRemoveLabel`; one with an 
 | `renderIcons`, `renderToolbarIcons({chromium, dir})` | See above. |
 | `buildTestCopy({from, to, hook, manifest})` | A test build: the extension, `hook` as its service worker (`e2e-hook.js`), the manifest changed. |
 | `testBuildDir(root, name)` | `.test-builds/<name>`, or under `$EXTENSION_TEST_BUILDS` (to test another build, or run two side by side). |
-| `storeFrame` | Store screenshots: `canvas`, `windowChrome`, `geometry`, `letterIcon`, `cursor`, `THEMES`, `W`×`H`. |
+| `storeFrame` | Store screenshots: `canvas`, `windowChrome` (and `windowChromeSvg`, from `frame/window.js`), `geometry`, `letterIcon`, `cursor`, `THEMES`, `W`×`H`. |
 | `placeholderWarning`, `repositoryReminder`, `printReleaseChecks` | See About links. |
 | `findDisallowedClones({runJscpd})` | Run jscpd and return clones `.jscpd-allowlist.json` doesn't cover (the `extension-kit duplication` command). |
 
@@ -543,7 +564,7 @@ chrome://bookmarks in Chromium 156 / Chrome 157; the sources are listed at the t
 ## Development
 
 `npm test` runs ESLint, a strict TypeScript check of the JSDoc (`checkJs`), the tests (the menu,
-the dialog, the toast, the dialog site list, icon rendering and the Chrome readers in Playwright's
+the dialog, the toast, the dialog site list, the window frame, icon rendering and the Chrome readers in Playwright's
 Chromium, the rest in Node and jsdom), and the
 copied-code guard. The `.d.ts` files are generated from the JSDoc: `npm run types` writes them, and
 the type check fails while one is stale (it regenerates them into `.types/` and compares).

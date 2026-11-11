@@ -5,7 +5,13 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.0] — Unreleased
+## [1.8.0] — Unreleased
+
+### Added
+
+- **Chrome's window around a capture** (`frame/window.js`, in the runtime half): `windowChrome`, `THEMES`, `letterIcon` moved there from `build/store-frame.js` (which re-exports them), plus `windowChromeSvg` (the tab strip and toolbar as an SVG image an extension page draws on a canvas, sharp at any scale; Chrome doesn't taint the canvas) and `WINDOW_BARS`/`WINDOW_W`. Better Screenshots draws it around a capture; the store screenshots use the same drawing. The markup's `<img>`s are self-closed so it parses as XML.
+
+## [1.7.0] — 2026-11-11
 
 ### Added
 

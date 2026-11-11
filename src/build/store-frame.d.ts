@@ -10,19 +10,27 @@
  * Playwright at `geometry(zoom).content`, then screenshot `canvas({caption, chrome:
  * windowChrome({tabs, url}), content})` at {@link W}×{@link H}.
  *
+ * The window itself is `frame/window.js`, in the runtime half, so an extension page can draw it
+ * around a capture too; it's re-exported here.
+ *
  * @module build/store-frame
  */
+export { THEMES, letterIcon, windowChrome, windowChromeSvg } from '../frame/window.js';
+export type Theme = import('../frame/window.js').Theme;
+export type Tab = import('../frame/window.js').Tab;
+/** @typedef {import('../frame/window.js').Theme} Theme */
+/** @typedef {import('../frame/window.js').Tab} Tab */
 /** The store screenshot's width. */
 export declare const W = 1280;
 /** The store screenshot's height. */
 export declare const H = 800;
 /** Where the window sits: its left edge, top edge, full width, and tab strip and toolbar heights. */
 export declare const WIN: {
+    strip: 42;
+    toolbar: 46;
     x: number;
     y: number;
     w: number;
-    strip: number;
-    toolbar: number;
 };
 export type Geometry = {
     /**
@@ -57,95 +65,6 @@ export type Geometry = {
  * @returns {Geometry} The window's unscaled width and the size to capture page content at.
  */
 export declare function geometry(zoom?: number): Geometry;
-/**
- * A letter favicon for made-up sites (no real brands).
- *
- * @param {string} letter - The letter.
- * @param {string} bg - Background colour.
- * @param {string} [fg] - Letter colour. Default white.
- * @returns {string} A data: URL of the SVG.
- */
-export declare const letterIcon: (letter: string, bg: string, fg?: string) => string;
-/** Chrome's light and dark window colours, and the canvas behind. */
-export declare const THEMES: {
-    light: {
-        bg: string;
-        caption: string;
-        sub: string;
-        frame: string;
-        tabText: string;
-        tabTextInactive: string;
-        tabSep: string;
-        activeTab: string;
-        toolbar: string;
-        toolbarIcon: string;
-        omnibox: string;
-        url: string;
-        urlDim: string;
-        contentLine: string;
-        shadow: string;
-    };
-    dark: {
-        bg: string;
-        caption: string;
-        sub: string;
-        frame: string;
-        tabText: string;
-        tabTextInactive: string;
-        tabSep: string;
-        activeTab: string;
-        toolbar: string;
-        toolbarIcon: string;
-        omnibox: string;
-        url: string;
-        urlDim: string;
-        contentLine: string;
-        shadow: string;
-    };
-};
-export type Theme = keyof typeof THEMES;
-export type Tab = {
-    /**
-     * Its title.
-     */
-    title: string;
-    /**
-     * Its favicon's URL.
-     */
-    icon: string;
-    /**
-     * The selected tab.
-     */
-    active?: boolean;
-    /**
-     * Playing sound.
-     */
-    audible?: boolean;
-    /**
-     * Muted.
-     */
-    muted?: boolean;
-};
-/**
- * The window's tab strip and toolbar, as HTML. Positions are window-relative.
- *
- * @param {object} options - What to draw.
- * @param {readonly Tab[]} options.tabs - The tabs, left to right.
- * @param {string} options.url - The address bar's text.
- * @param {string} [options.urlHost] - The start of `url` to show in full; the rest is dimmed.
- * @param {Theme} [options.theme] - Default light.
- * @param {number} [options.w] - The window's width. Default the full window.
- * @param {readonly string[]} [options.ext] - Toolbar extension icons' URLs.
- * @returns {string} The HTML, with its own styles.
- */
-export declare function windowChrome({ tabs, url, urlHost, theme, w, ext }: {
-    tabs: readonly Tab[];
-    url: string;
-    urlHost?: string;
-    theme?: Theme;
-    w?: number;
-    ext?: readonly string[];
-}): string;
 /**
  * The macOS arrow pointer.
  *
