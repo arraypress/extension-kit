@@ -139,6 +139,7 @@
     /* Icons for link rows (cr:open-in-new, cr:arrow-right / subpage arrow) and ⋮ buttons (cr:more-vert). */
     --icon-open-in-new: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z'/%3E%3C/svg%3E");
     --icon-arrow-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z'/%3E%3C/svg%3E");
+    --icon-arrow-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z'/%3E%3C/svg%3E");
     --icon-more-vert: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z'/%3E%3C/svg%3E");
 
     /* Sizes. */
@@ -299,6 +300,16 @@ button.link:hover { background: none; text-decoration: underline; }
 
 /* The ⋮ icon without a sprite: <span class="icon icon-more-vert" aria-hidden="true">. */
 .icon-more-vert { display: inline-block; background: currentColor; mask: var(--icon-more-vert) center / contain no-repeat; }
+
+/* The back arrow (cr:arrow-back), for a subpage's header. */
+.icon-arrow-back { display: inline-block; background: currentColor; mask: var(--icon-arrow-back) center / contain no-repeat; }
+.icon-arrow-back:dir(rtl) { transform: scaleX(-1); }
+
+/* settings-subpage's header, at the top of its card: the back button, then the subpage's title.
+   <div class="subpage-head"><button class="icon-button" aria-label="Back"><span class="icon icon-arrow-back"></span></button><h2>Cookies</h2></div> */
+.subpage-head { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 0 20px 0 8px; }
+.subpage-head h2 { margin: 0; font-size: 15px; font-weight: 400; color: var(--text); overflow-wrap: anywhere; }
+.subpage-head .icon-button { color: var(--icon-muted); }
 
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 

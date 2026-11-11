@@ -522,6 +522,7 @@ except those listed, each with a reason:
 | Manager layout | `.manager`/`.layout`, `.sidebar` with `.tree` > `.tree-item`, `.main` with `.list-card` |
 | Menu (cr-action-menu) | `<dialog class="menu">` of `button[role="menuitem"]`, `hr` (or `createMenu`) |
 | ⋮ icon | `<span class="icon icon-more-vert" aria-hidden="true">` (or `moreActionsButton`) |
+| Subpage header (settings-subpage) | `<div class="subpage-head">` with a back `button.icon-button` holding `.icon.icon-arrow-back`, then `<h2>` |
 | Dialog (cr-dialog) | `<dialog class="dialog"><form method="dialog">` `.dialog-title`, `.dialog-body`, `.dialog-buttons` (`askText`, `askFields`) |
 | Toast (cr-toast) | `<div class="toast" popover="manual">text <button>Undo</button></div>` (or `createToast`); with `hidden` instead of `popover`, it shows over the page but not the top layer |
 | Drawer (cr-drawer) | `<dialog class="drawer">` with `.drawer-head` and a `.nav` |

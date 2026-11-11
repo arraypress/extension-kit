@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Content-script helpers** (`content/`, in the runtime half): `inSlices` and `blocksOf` (a page worked through in blocks and slices that hand the main thread back) and `watchChanges` (one batch of what changed, the extension's own nodes ignored through `ignore`), from Better Prices' `content/slices.js` and `content/watch.js`, shared with Topicless.
 - **`runChecks`** and **`messageLookup`**/**`readMessages`** (`/testing`): an e2e script's run (clean-ups always, each within 30 s) and `chrome.i18n.getMessage` over the real `_locales`, from the copies in Better Prices, Better Downloads, Better Saves and Clean Links.
 - **`fakeChromeStorage`'s sync refuses a write past 102,400 bytes in all** (`SYNC_QUOTA_BYTES`), as Chrome's `QUOTA_BYTES` does: Topicless keeps word lists in sync and fits them to it.
+- **A subpage's header** (`.subpage-head`, `.icon-arrow-back`): settings-subpage's back button and title, at the top of its card (Topicless' topic page).
 - **The text dialog's fields**: `multiline` (a textarea, `rows`), `hint` (help under the field, or a function of its text), and a `value` that's a promise (`waiting` shown, the field disabled until it comes). For Topicless' word lists, which Chrome's on-device model suggests.
 
 ## [1.6.0] — 2026-11-11
