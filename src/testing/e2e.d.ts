@@ -193,6 +193,21 @@ export type CheckRunner = {
 export declare function checkRunner({ timeout: runnerTimeout }?: {
     timeout?: number;
 }): CheckRunner;
+/**
+ * Run a script's checks: an error outside any check is a failure, the
+ * clean-ups (closing browsers and servers) always run, in order, then the
+ * tally prints (and exits 1 on a failure). From the copies in Better Prices,
+ * Better Downloads, Better Saves and Clean Links (`test/e2e/helpers.mjs`).
+ *
+ * @param {CheckRunner} runner - From {@link checkRunner}.
+ * @param {() => Promise<void>} body - The checks.
+ * @param {readonly (() => Promise<unknown>)[]} cleanUps - Closing browsers and servers, in order.
+ * @returns {Promise<void>}
+ * @example
+ * const runner = checkRunner();
+ * await runChecks(runner, async () => { await runner.check('it hides', async () => { … }); }, [close, site.close]);
+ */
+export declare function runChecks(runner: CheckRunner, body: () => Promise<void>, cleanUps: readonly (() => Promise<unknown>)[]): Promise<void>;
 export type SchemePage = {
     /**
      * From the extension's root, e.g. `options/options.html`.

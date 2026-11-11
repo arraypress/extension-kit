@@ -8,11 +8,12 @@
  */
 export { TEST_BUILDS_ENV, testBuildDir } from '../build/test-build.js';
 export { chromeUserAgent, closeOnSignal, realisticBrowser } from './browser.js';
-export { CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, until, } from './e2e.js';
+export { CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, runChecks, until, } from './e2e.js';
 export { exitPoint, parseLiveOptions, parseProxy } from './live.js';
 export { eachLimited } from '../time/pool.js';
 export { filesIn, launchDownloading } from './downloads.js';
 export { fakeLanguageModel } from './fake-model.js';
+export { messageLookup, readMessages } from './messages.js';
 export { serve, testCertificate } from './server.js';
 export { SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';
@@ -24,6 +25,7 @@ export type FakeModelState = import('./fake-model.js').FakeModelState;
 export type ExtensionProfile = import('./e2e.js').ExtensionProfile;
 export type LaunchedExtension = import('./e2e.js').LaunchedExtension;
 export type LaunchOptions = import('./e2e.js').LaunchOptions;
+export type Messages = import('./messages.js').Messages;
 export type Exit = import('./live.js').Exit;
 export type LiveOptions = import('./live.js').LiveOptions;
 export type SavedTabGroup = import('./saved-groups.js').SavedTabGroup;
@@ -40,6 +42,7 @@ export type TestServer = import('./server.js').TestServer;
  * @typedef {import('./e2e.js').ExtensionProfile} ExtensionProfile
  * @typedef {import('./e2e.js').LaunchedExtension} LaunchedExtension
  * @typedef {import('./e2e.js').LaunchOptions} LaunchOptions
+ * @typedef {import('./messages.js').Messages} Messages
  * @typedef {import('./live.js').Exit} Exit
  * @typedef {import('./live.js').LiveOptions} LiveOptions
  * @typedef {import('./saved-groups.js').SavedTabGroup} SavedTabGroup

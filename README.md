@@ -478,6 +478,8 @@ except those listed, each with a reason:
 | `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
 | `launchDownloading(chromium, dir, options)`, `filesIn(dir)` | An extension in a browser that downloads for real: `{…launchExtension's, downloads}`, the profile's own Downloads folder (Playwright otherwise saves downloads under made-up names no extension sees); the files under a folder, downloads still running left out. |
 | `extensionProfile(chromium, dir, options)` | A profile to start the browser on more than once (a restart, a first start with a changed manifest): `{dir, launch(), remove()}`. |
+| `runChecks(runner, body, cleanUps)` | A script's checks: an error outside any check fails, the clean-ups always run (each within 30 s), then the tally. |
+| `messageLookup(extensionDir, locale)`, `readMessages(extensionDir, locale)` | `chrome.i18n.getMessage` over the real `_locales` (a locale over en, named placeholders filled), for unit tests. |
 | `checkRunner({timeout})` | Named checks that report and go on: `check(name, fn, {timeout})`, `fail(name)` for an error found outside a check, `finish()`. A check that runs past its limit (`CHECK_MS`, 60 s) fails, and the run goes on. |
 | `eachLimited(items, limit, work)` | Work through a list at most `limit` at once, `work(item, slot, index)` (also in the main entry). |
 | `realisticBrowser(options)`, `chromeUserAgent(browser)` | Launch options and a user agent for a browser that doesn't say it's automated, for live checks. |

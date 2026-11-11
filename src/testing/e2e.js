@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { deadline } from '../time/time.js';
+import { deadline, within } from '../time/time.js';
 
 /** @import { BrowserContext, BrowserType, CDPSession, Page, Worker } from 'playwright' */
 
@@ -243,6 +243,31 @@ export function checkRunner({ timeout: runnerTimeout = CHECK_MS } = {}) {
       process.exit(1);
     },
   };
+}
+
+/**
+ * Run a script's checks: an error outside any check is a failure, the
+ * clean-ups (closing browsers and servers) always run, in order, then the
+ * tally prints (and exits 1 on a failure). From the copies in Better Prices,
+ * Better Downloads, Better Saves and Clean Links (`test/e2e/helpers.mjs`).
+ *
+ * @param {CheckRunner} runner - From {@link checkRunner}.
+ * @param {() => Promise<void>} body - The checks.
+ * @param {readonly (() => Promise<unknown>)[]} cleanUps - Closing browsers and servers, in order.
+ * @returns {Promise<void>}
+ * @example
+ * const runner = checkRunner();
+ * await runChecks(runner, async () => { await runner.check('it hides', async () => { … }); }, [close, site.close]);
+ */
+export async function runChecks(runner, body, cleanUps) {
+  try {
+    await body();
+  } catch (error) {
+    runner.fail(`unexpected: ${error instanceof Error ? error.stack : error}`);
+  } finally {
+    for (const cleanUp of cleanUps) await within(Promise.resolve().then(cleanUp), 30_000, undefined);
+  }
+  runner.finish();
 }
 
 /**

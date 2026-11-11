@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`createModelRow`** (`ui/`): the settings row “Chrome’s built-in AI”, its state, help and Download button with progress (Better Downloads' `options/model-section.js`).
 - **`fakeLanguageModel`** (`/testing`): the Prompt API's shape for tests, moved from Better Downloads' `test/fakes/fake-model.js`, with failed downloads and answers, `responseConstraint` and clones logged.
 - **Content-script helpers** (`content/`, in the runtime half): `inSlices` and `blocksOf` (a page worked through in blocks and slices that hand the main thread back) and `watchChanges` (one batch of what changed, the extension's own nodes ignored through `ignore`), from Better Prices' `content/slices.js` and `content/watch.js`, shared with Topicless.
+- **`runChecks`** and **`messageLookup`**/**`readMessages`** (`/testing`): an e2e script's run (clean-ups always, each within 30 s) and `chrome.i18n.getMessage` over the real `_locales`, from the copies in Better Prices, Better Downloads, Better Saves and Clean Links.
 - **The text dialog's fields**: `multiline` (a textarea, `rows`), `hint` (help under the field, or a function of its text), and a `value` that's a promise (`waiting` shown, the field disabled until it comes). For Topicless' word lists, which Chrome's on-device model suggests.
 
 ## [1.6.0] — 2026-11-11

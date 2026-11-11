@@ -2,8 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import {
-  CHECK_MS, checkRunner, chromeUserAgent, closeOnSignal, eachLimited, realisticBrowser, serve, testCertificate, until,
+  CHECK_MS, checkRunner, chromeUserAgent, closeOnSignal, eachLimited, messageLookup, readMessages, realisticBrowser, runChecks, serve, testCertificate, until,
 } from '../src/testing/index.js';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 /** @import { Reply } from '../src/testing/server.js' */
 
@@ -81,11 +84,22 @@ describe('until', () => {
   });
 });
 
+/**
+ * The runner's printed lines and its exit calls, both held back from the test's own output.
+ *
+ * @param {import('node:test').TestContext} t - The test.
+ * @returns {{lines: string[], exit: import('node:test').Mock<(code?: number) => never>}} What it printed, and `process.exit`'s calls.
+ */
+function captured(t) {
+  const lines = /** @type {string[]} */ ([]);
+  t.mock.method(console, 'log', (/** @type {string} */ line) => lines.push(line));
+  const exit = t.mock.method(process, 'exit', /** @type {(code?: number) => never} */ (() => undefined));
+  return { lines, exit };
+}
+
 describe('checkRunner', () => {
   it('counts a failure found outside a check, and finish exits with 1 listing it', async (t) => {
-    const lines = /** @type {string[]} */ ([]);
-    t.mock.method(console, 'log', (/** @type {string} */ line) => lines.push(line));
-    const exit = t.mock.method(process, 'exit', /** @type {(code?: number) => never} */ (() => undefined));
+    const { lines, exit } = captured(t);
     const { check, fail, finish } = checkRunner();
     assert.equal(await check('passes', () => {}), true);
     fail('page error: boom');
@@ -102,6 +116,46 @@ describe('checkRunner', () => {
   });
 });
 
+describe('runChecks', () => {
+  it('fails an error outside any check, always runs the clean-ups in order, then finishes', async (t) => {
+    const { lines, exit } = captured(t);
+    const runner = checkRunner();
+    /** @type {string[]} */
+    const cleaned = [];
+    await runChecks(runner, async () => {
+      await runner.check('passes', () => {});
+      throw new Error('the browser went away');
+    }, [async () => cleaned.push('browser'), async () => { throw new Error('already closed'); }, async () => cleaned.push('server')]);
+    assert.deepEqual(cleaned, ['browser', 'server'], 'a failing clean-up doesn’t stop the rest');
+    assert.match(lines[1], /^ {2}✗ unexpected: Error: the browser went away/);
+    assert.deepEqual(exit.mock.calls.map((call) => call.arguments), [[1]]);
+  });
+});
+
+describe('messageLookup', () => {
+  it('reads the real messages, a locale over en, filling named placeholders as Chrome does', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'kit-messages-'));
+    try {
+      for (const [locale, messages] of Object.entries({
+        en: { optionsColor: { message: 'Color' }, optionsMoreActions: { message: 'More actions for $SITE$', placeholders: { site: { content: '$1' } } } },
+        en_GB: { optionsColor: { message: 'Colour' } },
+      })) {
+        await mkdir(path.join(dir, '_locales', locale), { recursive: true });
+        await writeFile(path.join(dir, '_locales', locale, 'messages.json'), JSON.stringify(messages));
+      }
+      const t = messageLookup(dir);
+      assert.equal(t('optionsColor'), 'Color');
+      assert.equal(t('optionsMoreActions', ['example.com']), 'More actions for example.com');
+      assert.equal(t('optionsMissing'), '');
+      const gb = messageLookup(dir, 'en_GB');
+      assert.equal(gb('optionsColor'), 'Colour');
+      assert.equal(gb('optionsMoreActions', 'bbc.co.uk'), 'More actions for bbc.co.uk');
+      assert.deepEqual(Object.keys(readMessages(dir, 'en_GB')), ['optionsColor']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('checkRunner’s time limit', () => {
   it('fails a check that hangs once its time is up, and goes on to the next', async (t) => {
