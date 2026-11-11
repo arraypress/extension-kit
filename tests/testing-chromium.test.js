@@ -136,3 +136,28 @@ describe('playPermissionPrompt (Chromium)', () => {
     }
   });
 });
+
+describe('heartbeat (Chromium)', () => {
+  it('gives the longest the page was held: a 200 ms loop shows, an idle page doesn’t', async () => {
+    const { heartbeat } = await import('../src/testing/index.js');
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      const idle = await heartbeat(page);
+      await page.waitForTimeout(150);
+      assert.ok(await idle() < 60);
+      const busy = await heartbeat(page);
+      await page.evaluate(() => new Promise((resolve) => setTimeout(() => { const end = performance.now() + 200; while (performance.now() < end); resolve(undefined); }, 20)));
+      await page.waitForTimeout(50);
+      const held = await busy();
+      assert.ok(held >= 190 && held < 400, String(held));
+      // Hidden, a held page isn't counted (Chrome throttles a hidden tab's timers anyway).
+      const hidden = await heartbeat(page);
+      await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); const end = performance.now() + 200; setTimeout(() => { while (performance.now() < end); }, 0); });
+      await page.waitForTimeout(300);
+      assert.ok(await hidden() < 60);
+    } finally {
+      await browser.close();
+    }
+  });
+});

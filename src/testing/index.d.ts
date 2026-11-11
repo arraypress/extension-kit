@@ -14,6 +14,7 @@ export { eachLimited } from '../time/pool.js';
 export { filesIn, launchDownloading } from './downloads.js';
 export { fakeLanguageModel } from './fake-model.js';
 export { messageLookup, readMessages } from './messages.js';
+export { heartbeat } from './heartbeat.js';
 export { playPermissionPrompt } from './prompt.js';
 export { serve, testCertificate } from './server.js';
 export { SYNC_QUOTA_BYTES, SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
