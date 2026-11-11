@@ -281,13 +281,12 @@ ends it.
 
 ```js
 // A page's elements in a line, and copying from a click (the copy command where the API can't).
-row.append(make('span', 'meta', '12 colours'), iconButton({ icon: 'i-copy', label: t('copy'), onClick: () => copyText(document, hex) }));
+row.append(make('span', 'meta', '12 colours'), iconButton({ icon: 'i-copy', label: t('copy'), onClick: () => copyFormats(document, { text: hex }) }));
 ```
 
 `make(tag, className, text, doc)`, `spriteIcon(id, className, doc)` (a `<use>` of the page's
 sprite) and `iconButton({icon, label, onClick, className, doc})` (tooltip and label) take the
-document the element belongs to, so a content script's overlay uses them too; so does
-`copyText(doc, text, holder)`, whose copy-command field goes in `holder` (the overlay).
+document the element belongs to, so a content script's overlay uses them too.
 `copyFormats(doc, {text, html})` puts plain text and HTML on the clipboard at once (a titled link
 for rich editors, its plain text for the rest) and resolves to whether it did; a content script
 can call it from a menu click or a shortcut (Chrome lets the focused active tab write), and

@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { RUNTIME_ENTRIES } from '../src/build/index.js';
 import {
-  callInPage, callInTab, copyText, counted, iconButton, noticeCard, importAndCall, isBrowserPage, make, openSidePanel, pageOverlay, sidePanelPath, spriteIcon,
+  callInPage, callInTab, counted, iconButton, noticeCard, importAndCall, isBrowserPage, make, openSidePanel, pageOverlay, sidePanelPath, spriteIcon,
 } from '../src/index.js';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
@@ -192,30 +192,6 @@ describe('make, spriteIcon and iconButton', () => {
     assert.equal(button.getAttribute('aria-label'), 'Copy');
     button.click();
     assert.equal(clicks, 1);
-  });
-});
-
-describe('copyText', () => {
-  it('the clipboard API when it works; the copy command in the holder when it doesn’t', async () => {
-    const { window } = new JSDOM('<body><div id="layer"></div></body>');
-    const { document } = window;
-    /** @type {string[]} */
-    const written = [];
-    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async (/** @type {string} */ text) => { written.push(text); } } });
-    await copyText(document, '#1a73e8');
-    assert.deepEqual(written, ['#1a73e8']);
-    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Document is not focused'); } } });
-    /** @type {string[]} */
-    const commands = [];
-    const holder = /** @type {HTMLElement} */ (document.getElementById('layer'));
-    document.execCommand = (/** @type {string} */ command) => {
-      const field = /** @type {HTMLTextAreaElement} */ (holder.querySelector('textarea'));
-      commands.push(`${command}:${field.value.slice(field.selectionStart, field.selectionEnd)}`);
-      return true;
-    };
-    await copyText(document, 'rgb(26 115 232)', holder);
-    assert.deepEqual(commands, ['copy:rgb(26 115 232)']);
-    assert.equal(holder.querySelector('textarea'), null, 'the field goes again');
   });
 });
 

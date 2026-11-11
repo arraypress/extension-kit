@@ -5,7 +5,7 @@
  * the built-in AI row), Chrome's window drawn around a capture, per-site lists' sites, Chrome's on-device model,
  * a content script's slices, change watcher, overlay and “Show on page” boxes, a module's
  * function called in a page or every frame of a tab, a tab's side panel opened from a click,
- * copying from a click, and making elements and icon buttons in a line. Every function takes the `chrome`
+ * copying (plain text and HTML), and making elements and icon buttons in a line. Every function takes the `chrome`
  * APIs it uses as arguments, so tests run the real logic against fakes.
  *
  * Build-time helpers are in `@arraypress/extension-kit/build`, test helpers
@@ -23,7 +23,6 @@ export { HIGHLIGHT_CSS, MAX_BOXES, createHighlighter } from './content/highlight
 export { pageOverlay } from './content/overlay.js';
 export { PAGE_TOAST_MS, showPageToast } from './content/page-toast.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
-export { copyText } from './dom/clipboard.js';
 export { copyFormats } from './dom/copy.js';
 export { focusedElement } from './dom/focus.js';
 export { iconButton, make, spriteIcon } from './dom/make.js';
