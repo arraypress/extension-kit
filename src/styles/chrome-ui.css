@@ -1063,6 +1063,13 @@ label.row, .row[actionable] { cursor: pointer; }
 .sp-item:is(:hover, :focus-within) .sp-suffix,
 .sp-suffix.always { display: flex; }
 
+/* .sp-notice (ui/notice.js): a card saying what a list leaves out or can't do; a warning's icon in
+   the error colour, an information's in the secondary text colour. */
+.sp-notice .sp-heading > .icon { flex: none; width: 18px; height: 18px; color: var(--error); }
+.sp-notice.info .sp-heading > .icon { color: var(--text-secondary); }
+.sp-notice-text { margin: 0; padding: 2px 16px 8px; color: var(--text-secondary); font-size: 12px; line-height: 16px; }
+.sp-notice-actions { display: flex; justify-content: flex-end; padding: 0 16px 8px; }
+
 /* sp-empty-state: a centred heading and a line of help. */
 .sp-empty {
     display: flex;

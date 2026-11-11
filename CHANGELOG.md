@@ -5,6 +5,24 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] — unreleased
+
+### Added
+
+- **`callInTab(edges, tabId, module, name, args)`** and **`isBrowserPage(url)`** (`scripting/tab.js`): a page module called in every frame of a tab, the answers top frame first, or why it can't be read (`'browser'`: Chrome's own pages and the Web Store, told by address or by Chrome's refusal; `'no-access'`). From Better Fonts' `panel/scan.js`; Better Colours reads its palette with it.
+- **`createHighlighter(doc, {root, onClear, max})`**, `HIGHLIGHT_CSS`, `MAX_BOXES` (`content/highlight.js`): “Show on page” boxes in DevTools' blue in the extension's overlay, only those in the window, following the page as it scrolls, cleared by Esc. From Better Fonts' `content/highlight.js`; Better Colours shows colours and contrast failures with it.
+- **`renderedElements(doc, {skip, limit})`**, **`shadowRootOf(element)`** and **`otherSiteFrames(doc)`** (`content/elements.js`): every element Chrome draws, in document order, into open and closed shadow roots and through `display: contents` wrappers (slots). From Better Fonts' `content/text.js` walk and `otherSites`; Better Colours reads every element's colours with it.
+- **`copyText(doc, text, holder)`** (`dom/clipboard.js`): the clipboard API, else the copy command in the extension's own layer. From Better Fonts' `shared/clipboard.js`.
+- **`make`, `spriteIcon`, `iconButton`** (`dom/make.js`): an element with its class and text, an icon from the page's sprite, Chrome's icon button with its tooltip, for any document. From Better Fonts' panel and layer.
+- **`noticeCard({icon, tone, title, text, buttons, actions})`** (`ui/notice.js`) and chrome-ui.css's `.sp-notice`: a side panel's notice card (frames from other sites to allow, a font that didn't load). From Better Fonts' `panel/render.js`.
+- **`counted(count, one, many, {t, lang})`** (`dom/i18n.js`): a count in words, the number as the language writes it. From Better Fonts' panel.
+- **`/testing`: `tabIdOf`, `callTabModule`, `pierceNodes`, `nodeAttribute`, `nodeText`**: a page's tab id, the page module called in its frames, and its whole tree through CDP (closed shadow roots, frames). From Better Fonts' e2e helpers.
+- **`buildTestCopy`'s `panelOpener`** and `PANEL_OPENER` (`/build`): the test page that opens the real side panel from a click, from Better Fonts' and Better Saves' copies of `open-panel.html`.
+
+### Fixed
+
+- **`pageOverlay`'s host can be styled**: its inline `all: initial !important` reset beat a plain `:host { position: fixed … }` rule (only `!important` `:host` rules applied) and reset `host.style.x = …`; the new `hostStyle` option sets the host's own styles inline, `!important`, after the reset. The README and JSDoc example used the losing `:host` rule; they use `hostStyle` now. Existing callers (Better Screenshots, Better Prices, Better Fonts) are unchanged: their `:host` rules are `!important`.
+
 ## [1.9.0] — 2026-11-11
 
 ### Added

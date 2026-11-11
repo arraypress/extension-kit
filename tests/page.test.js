@@ -11,7 +11,9 @@ import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { RUNTIME_ENTRIES } from '../src/build/index.js';
-import { callInPage, importAndCall, openSidePanel, pageOverlay, sidePanelPath } from '../src/index.js';
+import {
+  callInPage, callInTab, copyText, counted, iconButton, noticeCard, importAndCall, isBrowserPage, make, openSidePanel, pageOverlay, sidePanelPath, spriteIcon,
+} from '../src/index.js';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 const globals = /** @type {{chrome?: unknown}} */ (globalThis);
@@ -126,5 +128,122 @@ describe('openSidePanel', () => {
     await Promise.resolve();
     await Promise.resolve();
     await assert.rejects(openSidePanel(/** @type {any} */ (sidePanel), 12, 'panel/panel.html'), /user gesture/);
+  });
+});
+
+describe('pageOverlay hostStyle', () => {
+  it('sets each of the host’s own styles inline, !important, after the reset', () => {
+    const { document } = new JSDOM('<body></body>').window;
+    const { host } = pageOverlay(document, { name: 'my-overlay', css: '', hostStyle: { position: 'fixed', 'z-index': '2147483647' } });
+    assert.equal(host.style.getPropertyValue('position'), 'fixed');
+    assert.equal(host.style.getPropertyPriority('position'), 'important');
+    assert.equal(host.style.getPropertyValue('z-index'), '2147483647');
+    assert.equal(host.style.getPropertyPriority('z-index'), 'important');
+  });
+});
+
+describe('callInTab', () => {
+  /**
+   * Fake tabs and scripting: the tab's address (or a refusal), and the frames' answers (or a refusal).
+   *
+   * @param {{url?: string, tabError?: boolean, frames?: {frameId: number, result: unknown}[], refusal?: string}} tab
+   */
+  const edges = ({ url = 'https://example.com/', tabError = false, frames = [], refusal } = {}) => ({
+    tabs: { get: async () => { if (tabError) throw new Error('No tab with id'); return /** @type {chrome.tabs.Tab} */ ({ url }); } },
+    scripting: { executeScript: async () => { if (refusal) throw new Error(refusal); return /** @type {any} */ (frames); } },
+  });
+
+  it('the frames that answered, the top one first', async () => {
+    const reading = await callInTab(edges({ frames: [{ frameId: 9, result: 'b' }, { frameId: 0, result: 'a' }, { frameId: 4, result: null }] }), 1, 'content/main.js', 'scan');
+    assert.deepEqual(reading, { state: 'read', frames: [{ frameId: 0, result: 'a' }, { frameId: 9, result: 'b' }] });
+  });
+
+  it('Chrome’s own pages by address, or by its refusal when the address isn’t known', async () => {
+    for (const url of ['chrome://settings/', 'chrome-extension://abc/page.html', 'about:blank', 'view-source:https://a.com', 'https://chromewebstore.google.com/detail/x', 'https://chrome.google.com/webstore/x']) {
+      assert.deepEqual(await callInTab(edges({ url }), 1, 'm.js', 'f'), { state: 'browser' }, url);
+    }
+    assert.equal(isBrowserPage('https://example.com/chrome://x'), false);
+    assert.deepEqual(await callInTab(edges({ url: '', refusal: 'Cannot access a chrome:// URL' }), 1, 'm.js', 'f'), { state: 'browser' });
+    assert.deepEqual(await callInTab(edges({ url: '', refusal: 'The extensions gallery cannot be scripted.' }), 1, 'm.js', 'f'), { state: 'browser' });
+  });
+
+  it('no access: no tab, another site’s refusal, or no frame answered', async () => {
+    assert.deepEqual(await callInTab(edges({ tabError: true }), 1, 'm.js', 'f'), { state: 'no-access' });
+    assert.deepEqual(await callInTab(edges({ refusal: 'Cannot access contents of the page. Extension manifest must request permission to access the respective host.' }), 1, 'm.js', 'f'), { state: 'no-access' });
+    assert.deepEqual(await callInTab(edges({ frames: [{ frameId: 0, result: undefined }] }), 1, 'm.js', 'f'), { state: 'no-access' });
+  });
+});
+
+describe('make, spriteIcon and iconButton', () => {
+  it('an element with its class and text; an icon from the sprite; Chrome’s icon button with its tooltip', () => {
+    const { document } = new JSDOM('<body></body>').window;
+    const span = make('span', 'meta', '12 colours', document);
+    assert.equal(span.outerHTML, '<span class="meta">12 colours</span>');
+    assert.equal(make('div', '', '', document).outerHTML, '<div></div>');
+    const icon = spriteIcon('i-copy', 'small', document);
+    assert.equal(icon.getAttribute('class'), 'icon small');
+    assert.equal(icon.getAttribute('aria-hidden'), 'true');
+    assert.equal(icon.querySelector('use')?.getAttribute('href'), '#i-copy');
+    let clicks = 0;
+    const button = iconButton({ icon: 'i-copy', label: 'Copy', className: 'copy', onClick: () => { clicks += 1; }, doc: document });
+    assert.equal(button.className, 'icon-button copy');
+    assert.equal(button.type, 'button');
+    assert.equal(button.title, 'Copy');
+    assert.equal(button.getAttribute('aria-label'), 'Copy');
+    button.click();
+    assert.equal(clicks, 1);
+  });
+});
+
+describe('copyText', () => {
+  it('the clipboard API when it works; the copy command in the holder when it doesn’t', async () => {
+    const { window } = new JSDOM('<body><div id="layer"></div></body>');
+    const { document } = window;
+    /** @type {string[]} */
+    const written = [];
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async (/** @type {string} */ text) => { written.push(text); } } });
+    await copyText(document, '#1a73e8');
+    assert.deepEqual(written, ['#1a73e8']);
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Document is not focused'); } } });
+    /** @type {string[]} */
+    const commands = [];
+    const holder = /** @type {HTMLElement} */ (document.getElementById('layer'));
+    document.execCommand = (/** @type {string} */ command) => {
+      const field = /** @type {HTMLTextAreaElement} */ (holder.querySelector('textarea'));
+      commands.push(`${command}:${field.value.slice(field.selectionStart, field.selectionEnd)}`);
+      return true;
+    };
+    await copyText(document, 'rgb(26 115 232)', holder);
+    assert.deepEqual(commands, ['copy:rgb(26 115 232)']);
+    assert.equal(holder.querySelector('textarea'), null, 'the field goes again');
+  });
+});
+
+describe('noticeCard', () => {
+  it('a card: the icon, heading and buttons in a row, the line, then the actions; a warning unless it says otherwise', () => {
+    const { document } = new JSDOM('<body></body>').window;
+    const allow = make('button', '', 'Allow', document);
+    const card = noticeCard({ icon: 'i-frame', tone: 'info', title: 'Frames from other sites', text: 'ads.example.net', actions: [allow], doc: document });
+    assert.equal(card.className, 'sp-card sp-notice info');
+    assert.deepEqual([...card.children].map((child) => child.className), ['sp-heading', 'sp-notice-text', 'sp-notice-actions']);
+    assert.equal(card.querySelector('.sp-heading use')?.getAttribute('href'), '#i-frame');
+    assert.equal(card.querySelector('h2')?.textContent, 'Frames from other sites');
+    assert.equal(card.querySelector('.sp-notice-text')?.textContent, 'ads.example.net');
+    assert.equal(card.querySelector('.sp-notice-actions')?.firstElementChild, allow);
+    const show = make('button', 'icon-button', '', document);
+    const warning = noticeCard({ icon: 'i-warning', title: 'Didn’t load', text: 'x', buttons: [show], doc: document });
+    assert.equal(warning.className, 'sp-card sp-notice warning');
+    assert.equal(warning.querySelector('.sp-heading')?.lastElementChild, show);
+    assert.equal(warning.querySelector('.sp-notice-actions'), null);
+  });
+});
+
+describe('counted', () => {
+  it('the one message for one; the other with the number as the language writes it', () => {
+    const t = (/** @type {string} */ key, /** @type {string | string[] | undefined} */ subs = []) => `${key}(${[subs].flat().join()})`;
+    assert.equal(counted(1, 'one', 'many', { t, lang: 'en-GB' }), 'one()');
+    assert.equal(counted(0, 'one', 'many', { t, lang: 'en-GB' }), 'many(0)');
+    assert.equal(counted(1200, 'one', 'many', { t, lang: 'en-GB' }), 'many(1,200)');
+    assert.equal(counted(1200, 'one', 'many', { t, lang: 'de' }), 'many(1.200)');
   });
 });

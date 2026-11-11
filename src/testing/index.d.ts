@@ -16,6 +16,7 @@ export { fakeLanguageModel } from './fake-model.js';
 export { messageLookup, readMessages } from './messages.js';
 export { heartbeat } from './heartbeat.js';
 export { playPermissionPrompt } from './prompt.js';
+export { callTabModule, nodeAttribute, nodeText, pierceNodes, tabIdOf } from './pages.js';
 export { serve, testCertificate } from './server.js';
 export { SYNC_QUOTA_BYTES, SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';
@@ -28,6 +29,7 @@ export type ExtensionProfile = import('./e2e.js').ExtensionProfile;
 export type LaunchedExtension = import('./e2e.js').LaunchedExtension;
 export type LaunchOptions = import('./e2e.js').LaunchOptions;
 export type Messages = import('./messages.js').Messages;
+export type CdpNode = import('./pages.js').CdpNode;
 export type Exit = import('./live.js').Exit;
 export type LiveOptions = import('./live.js').LiveOptions;
 export type SavedTabGroup = import('./saved-groups.js').SavedTabGroup;
@@ -45,6 +47,7 @@ export type TestServer = import('./server.js').TestServer;
  * @typedef {import('./e2e.js').LaunchedExtension} LaunchedExtension
  * @typedef {import('./e2e.js').LaunchOptions} LaunchOptions
  * @typedef {import('./messages.js').Messages} Messages
+ * @typedef {import('./pages.js').CdpNode} CdpNode
  * @typedef {import('./live.js').Exit} Exit
  * @typedef {import('./live.js').LiveOptions} LiveOptions
  * @typedef {import('./saved-groups.js').SavedTabGroup} SavedTabGroup

@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
-  HOOK_FILE, ICON_SIZES, RUNTIME_ENTRIES, STYLESHEET, TEST_BUILDS_ENV, VENDOR_STAMP, buildTestCopy, checkVendored,
+  HOOK_FILE, ICON_SIZES, PANEL_OPENER, RUNTIME_ENTRIES, STYLESHEET, TEST_BUILDS_ENV, VENDOR_STAMP, buildTestCopy, checkVendored,
   clonesFromReport, disallowedClones, packageDir, placeholderWarning, printReleaseChecks, renderIcons, repositoryReminder,
   shipsFile, storeFrame, testBuildDir, toolbarIconFile, vendorKit, vendorPackage,
 } from '../src/build/index.js';
@@ -197,6 +197,23 @@ describe('test builds', () => {
     });
     await buildTestCopy({ from: path.join(dir, 'extension'), to });
     assert.equal(JSON.parse(await readFile(path.join(to, 'manifest.json'), 'utf8')).background.service_worker, 'background.js');
+  }));
+
+  it('buildTestCopy with panelOpener: a page whose button opens that panel through the vendored kit’s openSidePanel', () => inTemp(async (dir) => {
+    await writeTree(dir, { 'extension/manifest.json': '{}', 'extension/panel/panel.html': '' });
+    const to = testBuildDir(dir, 'e2e', {});
+    await buildTestCopy({ from: path.join(dir, 'extension'), to, panelOpener: 'panel/panel.html' });
+    assert.equal(PANEL_OPENER, 'e2e/open-panel.html');
+    assert.deepEqual(await filesUnder(to), ['e2e/open-panel.html', 'e2e/open-panel.js', 'manifest.json', 'panel/panel.html']);
+    assert.match(await readFile(path.join(to, PANEL_OPENER), 'utf8'), /<button id="open" type="button">[\s\S]*<script type="module" src="open-panel.js">/);
+    const script = await readFile(path.join(to, 'e2e/open-panel.js'), 'utf8');
+    // The import resolves to the kit as vendored into an extension (`vendor/extension-kit/` holds src's runtime folders).
+    const imported = /from '\.\.\/vendor\/extension-kit\/([^']+)'/.exec(script)?.[1] ?? '';
+    assert.ok(RUNTIME_ENTRIES.includes(imported.split('/')[0]) && (await readFile(path.join(path.dirname(STYLESHEET), '..', imported), 'utf8')).includes('export function openSidePanel'));
+    assert.match(script, /openSidePanel\(chrome\.sidePanel, tabId, "panel\/panel\.html"\)/);
+    assert.match(script, /document\.title = 'opened'/);
+    await buildTestCopy({ from: path.join(dir, 'extension'), to });
+    assert.equal((await filesUnder(to)).includes(PANEL_OPENER), false, 'not without it');
   }));
 });
 

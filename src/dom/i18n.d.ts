@@ -45,3 +45,20 @@ export declare function translator(i18n: Pick<I18nApi, 'getMessage'>): (key: str
  * @returns {void}
  */
 export declare function localize(root: ParentNode, i18n: I18nApi): void;
+/**
+ * A count in words, its number written as the person's language writes numbers: one message for
+ * one, another (with the number as `$1`) for any other count.
+ *
+ * @param {number} count - How many.
+ * @param {string} one - The message for one (`"1 colour"`).
+ * @param {string} many - The message for others (`"$COUNT$ colours"`, its placeholder `$1`).
+ * @param {{t: (key: string, substitutions?: string | string[]) => string, lang: string}} words - The
+ *   page's message lookup and the UI language.
+ * @returns {string} The words.
+ * @example
+ * counted(1200, 'panelColoursOne', 'panelColours', { t, lang: 'en-GB' }); // '1,200 colours'
+ */
+export declare const counted: (count: number, one: string, many: string, { t, lang }: {
+    t: (key: string, substitutions?: string | string[]) => string;
+    lang: string;
+}) => string;

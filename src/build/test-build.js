@@ -11,7 +11,7 @@
  * @module build/test-build
  */
 
-import { cp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /** The environment variable that moves the test builds' folder (absolute, or relative to the extension's root). */
@@ -53,7 +53,41 @@ export function testBuildDir(root, name = 'e2e', env = process.env) {
  *   imports the real worker and exposes what a test can't reach headlessly (a menu click, the
  *   toolbar button).
  * @property {(manifest: TestManifest) => void} [manifest] Changes the copy's manifest in place.
+ * @property {string} [panelOpener] A side panel page (`panel/panel.html`): adds {@link PANEL_OPENER}
+ *   (`?tab=<id>`), whose button opens that panel beside the tab the way the toolbar click does
+ *   (the kit's `openSidePanel`, during a real click), which Playwright can't click. Its title turns
+ *   `opened` (or `error: …`). The kit must be vendored at `vendor/extension-kit/`.
  */
+
+/** The page {@link TestBuild}'s `panelOpener` adds, from the build's root. */
+export const PANEL_OPENER = 'e2e/open-panel.html';
+
+/**
+ * The opener page's markup (its script a file beside it: extension pages run no inline script).
+ *
+ * @returns {string} The HTML.
+ */
+const openerHtml = () => `<!doctype html>
+<meta charset="utf-8">
+<title>Open the side panel</title>
+<!-- Test builds only: a button that does what the toolbar click does, which Playwright can't click. -->
+<button id="open" type="button">Open the side panel</button>
+<script type="module" src="open-panel.js"></script>
+`;
+
+/**
+ * The opener page's script.
+ *
+ * @param {string} panel - The panel page.
+ * @returns {string} The module.
+ */
+const openerScript = (panel) => `import { openSidePanel } from '../vendor/extension-kit/panel/side-panel.js';
+
+const tabId = Number(new URLSearchParams(location.search).get('tab'));
+document.getElementById('open').addEventListener('click', () => {
+  openSidePanel(chrome.sidePanel, tabId, ${JSON.stringify(panel)}).then(() => { document.title = 'opened'; }, (error) => { document.title = \`error: \${error.message}\`; });
+});
+`;
 
 /**
  * Copy an extension folder into a test build, with its own hook and manifest.
@@ -66,7 +100,7 @@ export function testBuildDir(root, name = 'e2e', env = process.env) {
  *   manifest: (manifest) => { manifest.host_permissions = ['http://127.0.0.1/*']; },
  * });
  */
-export async function buildTestCopy({ from, to, hook, manifest: change }) {
+export async function buildTestCopy({ from, to, hook, manifest: change, panelOpener }) {
   await rm(to, { recursive: true, force: true });
   await cp(from, to, { recursive: true });
   const file = path.join(to, 'manifest.json');
@@ -78,5 +112,10 @@ export async function buildTestCopy({ from, to, hook, manifest: change }) {
   }
   change?.(manifest);
   await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
+  if (panelOpener) {
+    await mkdir(path.join(to, path.dirname(PANEL_OPENER)), { recursive: true });
+    await writeFile(path.join(to, PANEL_OPENER), openerHtml());
+    await writeFile(path.join(to, PANEL_OPENER.replace(/\.html$/, '.js')), openerScript(panelOpener));
+  }
   return to;
 }

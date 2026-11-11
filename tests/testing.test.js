@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import {
   CHECK_MS, checkRunner, chromeUserAgent, closeOnSignal, eachLimited, messageLookup, readMessages, realisticBrowser, runChecks, serve, testCertificate, until,
+  nodeAttribute, nodeText, pierceNodes,
 } from '../src/testing/index.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -253,5 +254,27 @@ describe('a realistic browser', () => {
     assert.deepEqual(exit.mock.calls[1].arguments, [130]);
     again();
     assert.equal(process.listenerCount('SIGINT'), before);
+  });
+});
+
+describe('pierceNodes, nodeAttribute, nodeText', () => {
+  it('every node in tree order, shadow roots before children, frames’ documents after; attributes and text read', async () => {
+    const text = (/** @type {string} */ value) => ({ nodeId: 0, backendNodeId: 0, nodeType: 3, nodeName: '#text', nodeValue: value });
+    const root = {
+      nodeId: 1, backendNodeId: 1, nodeType: 9, nodeName: '#document', children: [{
+        nodeId: 2, backendNodeId: 2, nodeType: 1, nodeName: 'MY-LAYER', attributes: ['id', 'class', 'class', 'box'],
+        shadowRoots: [{ nodeId: 3, backendNodeId: 3, nodeType: 11, nodeName: '#document-fragment', children: [{ nodeId: 4, backendNodeId: 4, nodeType: 1, nodeName: 'DIV', children: [text('in '), text('shadow')] }] }],
+        children: [{ nodeId: 5, backendNodeId: 5, nodeType: 1, nodeName: 'IFRAME', contentDocument: { nodeId: 6, backendNodeId: 6, nodeType: 9, nodeName: '#document' } }],
+      }],
+    };
+    /** @type {unknown[]} */
+    const sent = [];
+    const cdp = /** @type {any} */ ({ send: async (/** @type {string} */ method, /** @type {unknown} */ params) => { sent.push([method, params]); return { root }; } });
+    const nodes = await pierceNodes(cdp);
+    assert.deepEqual(sent, [['DOM.getDocument', { depth: -1, pierce: true }]]);
+    assert.deepEqual(nodes.map((node) => node.nodeName), ['#document', 'MY-LAYER', '#document-fragment', 'DIV', '#text', '#text', 'IFRAME', '#document']);
+    assert.equal(nodeAttribute(nodes[1], 'class'), 'box', 'a name, not a value that looks like one');
+    assert.equal(nodeAttribute(nodes[1], 'title'), '');
+    assert.equal(nodeText(nodes[3]), 'in shadow');
   });
 });

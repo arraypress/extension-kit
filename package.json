@@ -1,6 +1,6 @@
 {
   "name": "@arraypress/extension-kit",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Shared pieces for Chrome extensions: Chrome's own page styles and components, a Chrome Sync settings store, the light/dark toolbar glyph, Chrome's on-device model, content-script helpers, About links, and build and test helpers.",
   "type": "module",
   "main": "src/index.js",

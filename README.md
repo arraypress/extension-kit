@@ -245,16 +245,51 @@ for (const { frameId, result } of frames) show(frameId, result);
 // From the toolbar click: the tab's own side panel, panel/panel.html?tab=<id>, nothing awaited first.
 chrome.action.onClicked.addListener((tab) => openSidePanel(chrome.sidePanel, tab.id, 'panel/panel.html'));
 
-// In the content script: a layer the page's styles can't touch (a closed shadow root).
-const { root, remove } = pageOverlay(document, { name: 'my-inspector', css: ':host { position: fixed; inset: 0; pointer-events: none; }' });
+// In the panel: every frame of the tab, or why it can't be read.
+const reading = await callInTab(chrome, tabId, 'content/main.js', 'scan');
+if (reading.state === 'read') show(reading.frames); // top frame first
+else showMessage(reading.state);                   // 'browser' (Chrome's own page) or 'no-access'
+
+// In the content script: a layer the page's styles can't touch (a closed shadow root). The host's
+// own styles go in hostStyle: its inline `all: initial !important` reset beats a `:host` rule.
+const { root, remove } = pageOverlay(document, {
+  name: 'my-inspector',
+  hostStyle: { position: 'fixed', inset: '0', 'z-index': '2147483647', 'pointer-events': 'none' },
+  css: `${HIGHLIGHT_CSS} .card { position: absolute; }`,
+});
+
+// “Show on page”: boxes in DevTools' blue, kept on the elements as the page scrolls; Esc clears.
+const highlight = createHighlighter(document, { root: () => root });
+highlight.show(elements, { reveal: true });
 ```
 
 `callInPage(scripting, target, module, name, args, {immediately})` resolves to each frame's
 `{frameId, result}` (frames Chrome couldn't run in left out) and rejects when it can run in none;
 `immediately` (default true) doesn't wait for the page to be idle. `openSidePanel` sets the tab's
 panel to `path?tab=<id>` (`sidePanelPath`) and opens it in the same moment: Chrome opens a panel
-only while the click counts. `pageOverlay` puts a host element of its own name (`all: initial`)
-on the root element, replacing one a run before left; `root` is its closed shadow root, `css` first.
+only while the click counts. `callInTab(edges, tabId, module, name, args)` calls it in every frame
+and gives `{state: 'read', frames}` (frames that answered, top first), or `{state: 'browser'}` for
+a page Chrome keeps to itself (`isBrowserPage(url)`: its own pages, the Web Store) or
+`{state: 'no-access'}` (the tab went to another site since the click). `pageOverlay` puts a host
+element of its own name on the root element, replacing one a run before left; `root` is its closed
+shadow root, `css` first. The host is reset inline (`all: initial !important`) so the page can't
+move or hide it; that also beats a `:host { … }` rule and `host.style.x = …`, so the host's own
+styles go in `hostStyle` (set `!important` after the reset). `createHighlighter(doc, {root, onClear,
+max})` boxes up to 500 elements (`MAX_BOXES`) in the overlay (`HIGHLIGHT_CSS` styles them), only
+those in the window, following the page as it scrolls; `show` replaces the set, `clear` or Esc
+ends it.
+
+```js
+// A page's elements in a line, and copying from a click (the copy command where the API can't).
+row.append(make('span', 'meta', '12 colours'), iconButton({ icon: 'i-copy', label: t('copy'), onClick: () => copyText(document, hex) }));
+```
+
+`make(tag, className, text, doc)`, `spriteIcon(id, className, doc)` (a `<use>` of the page's
+sprite) and `iconButton({icon, label, onClick, className, doc})` (tooltip and label) take the
+document the element belongs to, so a content script's overlay uses them too; so does
+`copyText(doc, text, holder)`, whose copy-command field goes in `holder` (the overlay).
+`noticeCard({icon, tone, title, text, buttons, actions})` is a side panel's notice (`.sp-notice`:
+frames from other sites to allow); `counted(count, one, many, {t, lang})` a count in words.
 
 ## A content script on every site
 
@@ -349,6 +384,13 @@ style read, each text measured): `work(item, index)`. `watchChanges` hands over 
 changing (at most `maxWaitMs` while it keeps on); an element with a few children (`regroupChildren`,
 default 6) whose children changed is handed over whole. Both are pure DOM, so a content script
 imports them directly (list them in `web_accessible_resources`).
+
+`renderedElements(doc, {skip, limit})` (`content/elements.js`) lists every element Chrome draws,
+in document order, into open and closed shadow roots (`shadowRootOf`, through
+`chrome.dom.openOrClosedShadowRoot`) and through `display: contents` wrappers; what's inside a
+`visibility: hidden` element is still read, nothing inside `display: none`; at most 20,000
+(`MAX_ELEMENTS`). `otherSiteFrames(doc)` gives the origins of frames from other sites, which a
+reading of the tab leaves out until the person allows those sites.
 
 ## Time limits
 
@@ -513,7 +555,7 @@ A list with an Add button needs every key but `optionsRemoveLabel`; one with an 
 | `vendorPackage(name, files, dest)`, `packageDir(name)` | Copy files of an installed package, stamped (`extension-kit vendor <dir> <package> <path>...`). |
 | `checkVendored(dir)` | The stale copies under `dir` (`extension-kit vendor-check`). |
 | `renderIcons`, `renderToolbarIcons({chromium, dir})` | See above. |
-| `buildTestCopy({from, to, hook, manifest})` | A test build: the extension, `hook` as its service worker (`e2e-hook.js`), the manifest changed. |
+| `buildTestCopy({from, to, hook, manifest, panelOpener})` | A test build: the extension, `hook` as its service worker (`e2e-hook.js`), the manifest changed; with `panelOpener` (`'panel/panel.html'`), `e2e/open-panel.html?tab=<id>` (`PANEL_OPENER`), whose button opens that side panel beside the tab as the toolbar click does (Playwright can't click the toolbar; its title turns `opened`). |
 | `testBuildDir(root, name)` | `.test-builds/<name>`, or under `$EXTENSION_TEST_BUILDS` (to test another build, or run two side by side). |
 | `storeFrame` | Store screenshots: `canvas`, `windowChrome` (and `windowChromeSvg`, from `frame/window.js`), `geometry`, `letterIcon`, `cursor`, `THEMES`, `W`×`H`. |
 | `placeholderWarning`, `repositoryReminder`, `printReleaseChecks` | See About links. |
@@ -546,6 +588,9 @@ except those listed, each with a reason:
 | `realisticBrowser(options)`, `chromeUserAgent(browser)` | Launch options and a user agent for a browser that doesn't say it's automated, for live checks. |
 | `closeOnSignal(close)` | On Ctrl-C or a kill, close the run's browsers, then exit. |
 | `testBuildDir(root, name)` | As in `/build`, for the tests that load the build. |
+| `tabIdOf(worker, page)` | A Playwright page's tab id, as the extension's worker sees it. |
+| `callTabModule(worker, tabId, module, name, args)` | An export of the extension's page module called in a tab's frames, as `callInPage` does: `[{frameId, result}]`. |
+| `pierceNodes(cdp)`, `nodeAttribute(node, name)`, `nodeText(node)` | A page's whole tree through the DevTools protocol, closed shadow roots and frames included (where an extension's overlay is), and a node's attribute and text. |
 | `serve(routes, {port, tls})` | Serve test pages on 127.0.0.1 from a table, a `Map` or a function of the path; `{origin, port, server, close()}`. With `tls` (`testCertificate()`, a throwaway one from `openssl`), over HTTPS: for a site Chrome reaches only over HTTPS, mapped with `--host-resolver-rules`, Chromium started with `--ignore-certificate-errors`. |
 | `until(fn, what, timeout?)` | Poll until truthy. |
 | `offscreenEmulator(cdp)` | Emulate light/dark inside the offscreen document. |

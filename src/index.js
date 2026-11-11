@@ -3,8 +3,9 @@
  * service worker and content scripts load, Chrome's page components (the ⋮
  * menu, the text dialog, the toast with Undo, a settings card's site list,
  * the built-in AI row), Chrome's window drawn around a capture, per-site lists' sites, Chrome's on-device model,
- * a content script's slices, change watcher and overlay, a module's function called in a page,
- * and a tab's side panel opened from a click. Every function takes the `chrome`
+ * a content script's slices, change watcher, overlay and “Show on page” boxes, a module's
+ * function called in a page or every frame of a tab, a tab's side panel opened from a click,
+ * copying from a click, and making elements and icon buttons in a line. Every function takes the `chrome`
  * APIs it uses as arguments, so tests run the real logic against fakes.
  *
  * Build-time helpers are in `@arraypress/extension-kit/build`, test helpers
@@ -20,16 +21,21 @@ export {
 } from './ai/model.js';
 export { setShortcuts } from './commands/shortcuts.js';
 export { BLOCK_CHARS, SLICE_MS, blocksOf, eachInSlices, inSlices } from './content/slices.js';
+export { MAX_ELEMENTS, otherSiteFrames, renderedElements, shadowRootOf } from './content/elements.js';
+export { HIGHLIGHT_CSS, MAX_BOXES, createHighlighter } from './content/highlight.js';
 export { pageOverlay } from './content/overlay.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
+export { copyText } from './dom/clipboard.js';
 export { focusedElement } from './dom/focus.js';
+export { iconButton, make, spriteIcon } from './dom/make.js';
 export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
-export { localize, translator } from './dom/i18n.js';
+export { counted, localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
 export { openSidePanel, sidePanelPath } from './panel/side-panel.js';
 export { callInPage, importAndCall } from './scripting/call.js';
 export { contentScriptSync } from './scripting/registration.js';
+export { callInTab, isBrowserPage } from './scripting/tab.js';
 export { createSettingsSaver } from './settings/saver.js';
 export { MAX_SYNC_ITEM_BYTES } from './settings/storage.js';
 export { createSettingsStore } from './settings/store.js';
@@ -47,6 +53,7 @@ export { MENU_EDGE, createMenu, isInside, menuPosition, moreActionsButton } from
 export { createModelRow } from './ui/model-row.js';
 export { SITE_LIST_MESSAGES, SITE_LIST_WORDS, createSiteList } from './ui/site-list.js';
 export { askFields, askText, checkText, fieldIds } from './ui/text-dialog.js';
+export { noticeCard } from './ui/notice.js';
 export { TOAST_MS, createToast } from './ui/toast.js';
 
 /**
@@ -61,6 +68,7 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./ai/model.js').ModelSession} ModelSession
  * @typedef {import('./ai/model.js').ModelStatus} ModelStatus
  * @typedef {import('./content/slices.js').SliceOptions} SliceOptions
+ * @typedef {import('./content/highlight.js').Highlighter} Highlighter
  * @typedef {import('./content/overlay.js').PageOverlay} PageOverlay
  * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers
  * @typedef {import('./frame/window.js').Tab} WindowTab
@@ -69,6 +77,8 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./ui/model-row.js').ModelRow} ModelRow
  * @typedef {import('./scripting/registration.js').ContentScript} ContentScript
  * @typedef {import('./scripting/call.js').FrameResult<unknown>} FrameResult
+ * @typedef {import('./scripting/tab.js').TabReading<unknown>} TabReading
+ * @typedef {import('./scripting/tab.js').TabEdges} TabEdges
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
  * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem
@@ -77,5 +87,6 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./ui/text-dialog.js').FieldRequest} FieldRequest
  * @typedef {import('./ui/text-dialog.js').FieldsRequest} FieldsRequest
  * @typedef {import('./ui/text-dialog.js').TextRequest} TextRequest
+ * @typedef {import('./ui/notice.js').Notice} Notice
  * @typedef {import('./ui/toast.js').Toast} Toast
  */

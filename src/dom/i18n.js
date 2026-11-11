@@ -60,3 +60,18 @@ export function localize(root, i18n) {
   }
   if ('documentElement' in root) /** @type {Document} */ (root).documentElement.lang = i18n.getUILanguage();
 }
+
+/**
+ * A count in words, its number written as the person's language writes numbers: one message for
+ * one, another (with the number as `$1`) for any other count.
+ *
+ * @param {number} count - How many.
+ * @param {string} one - The message for one (`"1 colour"`).
+ * @param {string} many - The message for others (`"$COUNT$ colours"`, its placeholder `$1`).
+ * @param {{t: (key: string, substitutions?: string | string[]) => string, lang: string}} words - The
+ *   page's message lookup and the UI language.
+ * @returns {string} The words.
+ * @example
+ * counted(1200, 'panelColoursOne', 'panelColours', { t, lang: 'en-GB' }); // '1,200 colours'
+ */
+export const counted = (count, one, many, { t, lang }) => (count === 1 ? t(one) : t(many, [count.toLocaleString(lang)]));

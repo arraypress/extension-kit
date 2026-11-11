@@ -1,7 +1,11 @@
 /**
  * The ⋮ menu, the one-field dialog and the toast in Playwright's Chromium:
  * they're built on a modal `<dialog>`, its backdrop, popovers, the top layer,
- * shadow roots and real focus, none of which jsdom has. The kit's own modules and stylesheet are served to a page
+ * shadow roots and real focus, none of which jsdom has. A content script's
+ * overlay and “Show on page” boxes too, where the page's styles, the overlay's
+ * inline reset and layout are real: the host's own styles (`hostStyle`) beat
+ * the reset a plain `:host` rule loses to; boxes follow their elements, stay
+ * within the window, and go with Esc. The kit's own modules and stylesheet are served to a page
  * and driven with real keys and clicks.
  *
  * @module tests/ui-chromium
@@ -58,6 +62,24 @@ const PAGE = `<!doctype html>
 </script>
 </body></html>`;
 
+/** A page whose own styles try to move unknown elements, with things to box. */
+const CONTENT_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<style>
+  body { margin: 0; }
+  * { position: relative !important; }
+  p { margin: 0 0 20px; width: 200px; height: 20px; }
+  #tall { height: 3000px; }
+</style>
+</head><body>
+<p id="one">One</p><p id="two">Two</p><div id="tall"></div><p id="far">Far</p>
+<script type="module">
+  import * as kit from '/src/index.js';
+  window.kit = kit;
+  window.ready = true;
+</script>
+</body></html>`;
+
 /** @type {TestServer} */
 let site;
 /** @type {Browser} */
@@ -66,6 +88,7 @@ let browser;
 before(async () => {
   site = await serve(async (pathname) => {
     if (pathname === '/') return PAGE;
+    if (pathname === '/content') return CONTENT_PAGE;
     const file = path.join(SRC, path.normalize(pathname.replace(/^\/src\//, '')));
     if (!file.startsWith(SRC)) return undefined;
     const body = await readFile(file).catch(() => undefined);
@@ -83,12 +106,13 @@ after(async () => {
 /**
  * A fresh page with the kit loaded.
  *
+ * @param {string} [pathname] - The page: `/` (a row and buttons) or `/content` (a page whose styles move unknown elements).
  * @returns {Promise<Page>} The page, 800 × 600.
  */
-async function open() {
+async function open(pathname = '/') {
   const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
   page.on('pageerror', (error) => { throw error; });
-  await page.goto(`${site.origin}/`);
+  await page.goto(`${site.origin}${pathname}`);
   await page.waitForFunction(() => 'ready' in window);
   return page;
 }
@@ -625,5 +649,113 @@ describe('site list with an Add button (Chromium)', () => {
 
   it('the standard keys name every word', () => {
     assert.deepEqual(Object.keys(SITE_LIST_MESSAGES).sort(), Object.keys(SITE_LIST_WORDS).sort());
+  });
+});
+
+describe('pageOverlay (Chromium)', () => {
+  it('hostStyle positions the host over the page’s own rules; a plain :host rule loses to the reset', async () => {
+    const page = await open('/content');
+    const styles = await page.evaluate(() => {
+      const { kit } = /** @type {any} */ (window);
+      const plain = kit.pageOverlay(document, { name: 'plain-overlay', css: ':host { position: fixed; top: 0; z-index: 7; }' });
+      const given = kit.pageOverlay(document, { name: 'given-overlay', css: '', hostStyle: { position: 'fixed', top: '0px', 'z-index': '7' } });
+      const read = (/** @type {Element} */ host) => {
+        const style = getComputedStyle(host);
+        return { position: style.position, top: style.top, zIndex: style.zIndex };
+      };
+      return { plain: read(plain.host), given: read(given.host) };
+    });
+    assert.deepEqual(styles.plain, { position: 'static', top: 'auto', zIndex: 'auto' }, 'the reset wins over :host, as the old docs’ example found');
+    assert.deepEqual(styles.given, { position: 'fixed', top: '0px', zIndex: '7' });
+    await page.close();
+  });
+});
+
+describe('createHighlighter (Chromium)', () => {
+  it('boxes each element where it is, moves the boxes as the page scrolls, leaves out what’s off screen, and Esc clears them', async () => {
+    const page = await open('/content');
+    const first = await page.evaluate(() => {
+      const { kit } = /** @type {any} */ (window);
+      const overlay = kit.pageOverlay(document, { name: 'box-overlay', css: kit.HIGHLIGHT_CSS, hostStyle: { position: 'absolute', top: '0', left: '0' } });
+      /** @type {any} */ (window).cleared = 0;
+      /** @type {any} */ (window).root = overlay.root;
+      /** @type {any} */ (window).highlight = kit.createHighlighter(document, { root: () => overlay.root, onClear: () => { /** @type {any} */ (window).cleared += 1; } });
+      const count = /** @type {any} */ (window).highlight.show(['one', 'two', 'far'].map((id) => document.getElementById(id)));
+      return { count, boxes: [...overlay.root.querySelectorAll('.box')].map((box) => box.getBoundingClientRect().toJSON()) };
+    });
+    assert.equal(first.count, 3);
+    assert.deepEqual(first.boxes.map((box) => [box.x, box.y, box.width, box.height]), [[-2, -2, 204, 24], [-2, 38, 204, 24]], 'the far one is below the window');
+    await page.evaluate(() => scrollTo(0, 30));
+    // “One” is above the window now; “Two” moved up with the page.
+    await page.waitForFunction(() => [.../** @type {any} */ (window).root.querySelectorAll('.box')].map((box) => box.getBoundingClientRect().y).join() === '8', null, { timeout: 5000 });
+    await page.keyboard.press('Escape');
+    const after = await page.evaluate(() => ({ boxes: /** @type {any} */ (window).root.querySelectorAll('.box').length, cleared: /** @type {any} */ (window).cleared }));
+    assert.deepEqual(after, { boxes: 0, cleared: 1 });
+    await page.close();
+  });
+
+  it('reveal scrolls the first into view; elements no longer in the page aren’t boxed; at most max', async () => {
+    const page = await open('/content');
+    const result = await page.evaluate(() => {
+      const { kit } = /** @type {any} */ (window);
+      const overlay = kit.pageOverlay(document, { name: 'box-overlay', css: kit.HIGHLIGHT_CSS });
+      const highlight = kit.createHighlighter(document, { root: () => overlay.root, max: 1 });
+      const gone = document.createElement('p');
+      const count = highlight.show([gone, document.getElementById('far'), document.getElementById('one')], { reveal: true });
+      return { count, scrolled: scrollY > 2000, boxes: overlay.root.querySelectorAll('.box').length };
+    });
+    assert.deepEqual(result, { count: 1, scrolled: true, boxes: 1 });
+    await page.close();
+  });
+});
+
+describe('renderedElements (Chromium)', () => {
+  it('document order, shadow roots (closed ones through chrome.dom) before their children; hidden parts left out', async () => {
+    const page = await open('/content');
+    const ids = await page.evaluate(() => {
+      const { kit } = /** @type {any} */ (window);
+      document.body.innerHTML = `
+        <div id="a"><span id="b">b</span></div>
+        <div id="gone" style="display: none"><span id="gone-child">x</span></div>
+        <div id="hidden" style="visibility: hidden"><span id="shown-again" style="visibility: visible">y</span><span id="hidden-child">z</span></div>
+        <script id="script">1</script>
+        <div id="open-host"><span id="light">l</span></div>
+        <div id="closed-host"></div>
+        <div id="skipped"><span id="skipped-child">s</span></div>
+        <div id="contents" style="display: contents"><span id="in-contents">c</span></div>
+        <div id="last"></div>`;
+      const open = /** @type {HTMLElement} */ (document.getElementById('open-host')).attachShadow({ mode: 'open' });
+      open.innerHTML = '<b id="in-open">o</b><slot></slot>';
+      const closedHost = /** @type {HTMLElement} */ (document.getElementById('closed-host'));
+      const closed = closedHost.attachShadow({ mode: 'closed' });
+      closed.innerHTML = '<i id="in-closed">c</i>';
+      /** @type {any} */ (globalThis).chrome = { dom: { openOrClosedShadowRoot: (/** @type {Element} */ host) => (host === closedHost ? closed : host.shadowRoot) } };
+      const all = kit.renderedElements(document, { skip: (/** @type {Element} */ element) => element.id === 'skipped' }).map((/** @type {Element} */ element) => element.id || element.localName);
+      const two = kit.renderedElements(document, { limit: 2 }).map((/** @type {Element} */ element) => element.id || element.localName);
+      delete (/** @type {any} */ (globalThis)).chrome;
+      const withoutChrome = kit.renderedElements(document).map((/** @type {Element} */ element) => element.id || element.localName);
+      return { all, two, closedSeen: withoutChrome.includes('in-closed') };
+    });
+    assert.deepEqual(ids.all, ['body', 'a', 'b', 'shown-again', 'open-host', 'in-open', 'light', 'closed-host', 'in-closed', 'in-contents', 'last']);
+    assert.deepEqual(ids.two, ['body', 'a']);
+    assert.equal(ids.closedSeen, false, 'a closed root without chrome.dom stays closed');
+    await page.close();
+  });
+});
+
+describe('otherSiteFrames (Chromium)', () => {
+  it('the origins of frames from other sites, in shadow roots too, each once; the page’s own and srcdoc frames left out', async () => {
+    const page = await open('/content');
+    const sites = await page.evaluate((origin) => {
+      const { kit } = /** @type {any} */ (window);
+      document.body.innerHTML = `
+        <iframe src="https://ads.example.net/a"></iframe><iframe src="https://ads.example.net/b"></iframe>
+        <iframe src="${origin}/same"></iframe><iframe srcdoc="<p>x</p>"></iframe><iframe src="javascript:void 0"></iframe>
+        <div id="host"></div>`;
+      /** @type {HTMLElement} */ (document.getElementById('host')).attachShadow({ mode: 'open' }).innerHTML = '<iframe src="https://video.example.com/v"></iframe>';
+      return kit.otherSiteFrames(document);
+    }, site.origin);
+    assert.deepEqual(sites, ['https://ads.example.net', 'https://video.example.com']);
+    await page.close();
   });
 });

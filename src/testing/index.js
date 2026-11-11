@@ -19,6 +19,7 @@ export { fakeLanguageModel } from './fake-model.js';
 export { messageLookup, readMessages } from './messages.js';
 export { heartbeat } from './heartbeat.js';
 export { playPermissionPrompt } from './prompt.js';
+export { callTabModule, nodeAttribute, nodeText, pierceNodes, tabIdOf } from './pages.js';
 export { serve, testCertificate } from './server.js';
 export { SYNC_QUOTA_BYTES, SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';
@@ -35,6 +36,7 @@ export { installWarnings, warningsAddedBy, withoutPermissions } from './warnings
  * @typedef {import('./e2e.js').LaunchedExtension} LaunchedExtension
  * @typedef {import('./e2e.js').LaunchOptions} LaunchOptions
  * @typedef {import('./messages.js').Messages} Messages
+ * @typedef {import('./pages.js').CdpNode} CdpNode
  * @typedef {import('./live.js').Exit} Exit
  * @typedef {import('./live.js').LiveOptions} LiveOptions
  * @typedef {import('./saved-groups.js').SavedTabGroup} SavedTabGroup

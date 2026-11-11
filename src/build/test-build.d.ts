@@ -54,6 +54,12 @@ export type TestBuild = {
      * Changes the copy's manifest in place.
      */
     manifest?: (manifest: TestManifest) => void;
+    /**
+     * A side panel page (`panel/panel.html`): adds {@link PANEL_OPENER}(`?tab=<id>`), whose button opens that panel beside the tab the way the toolbar click does
+     * (the kit's `openSidePanel`, during a real click), which Playwright can't click. Its title turns
+     * `opened` (or `error: …`). The kit must be vendored at `vendor/extension-kit/`.
+     */
+    panelOpener?: string;
 };
 /**
  * A Chrome extension manifest, as far as a test build changes it.
@@ -70,7 +76,13 @@ export type TestBuild = {
  *   imports the real worker and exposes what a test can't reach headlessly (a menu click, the
  *   toolbar button).
  * @property {(manifest: TestManifest) => void} [manifest] Changes the copy's manifest in place.
+ * @property {string} [panelOpener] A side panel page (`panel/panel.html`): adds {@link PANEL_OPENER}
+ *   (`?tab=<id>`), whose button opens that panel beside the tab the way the toolbar click does
+ *   (the kit's `openSidePanel`, during a real click), which Playwright can't click. Its title turns
+ *   `opened` (or `error: …`). The kit must be vendored at `vendor/extension-kit/`.
  */
+/** The page {@link TestBuild}'s `panelOpener` adds, from the build's root. */
+export declare const PANEL_OPENER = "e2e/open-panel.html";
 /**
  * Copy an extension folder into a test build, with its own hook and manifest.
  *
@@ -82,4 +94,4 @@ export type TestBuild = {
  *   manifest: (manifest) => { manifest.host_permissions = ['http://127.0.0.1/*']; },
  * });
  */
-export declare function buildTestCopy({ from, to, hook, manifest: change }: TestBuild): Promise<string>;
+export declare function buildTestCopy({ from, to, hook, manifest: change, panelOpener }: TestBuild): Promise<string>;
