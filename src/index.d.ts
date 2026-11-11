@@ -16,7 +16,7 @@
 export { githubAboutLinks, isPlaceholder } from './about/links.js';
 export { MODEL_MESSAGES, chromeLanguageModel, createModelSession, describeModel, downloadModel, modelAvailability, } from './ai/model.js';
 export { setShortcuts } from './commands/shortcuts.js';
-export { BLOCK_CHARS, SLICE_MS, blocksOf, inSlices } from './content/slices.js';
+export { BLOCK_CHARS, SLICE_MS, blocksOf, eachInSlices, inSlices } from './content/slices.js';
 export { pageOverlay } from './content/overlay.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { focusedElement } from './dom/focus.js';

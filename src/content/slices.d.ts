@@ -49,6 +49,21 @@ export type SliceOptions = {
  * @property {() => number} [now] The clock. Default `performance.now`.
  */
 /**
+ * Work through any list in slices: `work(item, index)` on each, the main
+ * thread handed back whenever a slice has run `sliceMs`. For a content
+ * script's work that isn't cut by blocks of the page (each element's style
+ * read, each text measured).
+ *
+ * @template T
+ * @param {Iterable<T>} items - The items.
+ * @param {(item: T, index: number) => void} work - What to do with one.
+ * @param {Pick<SliceOptions, 'sliceMs' | 'pause' | 'now'>} [options] - Slice length, how to pause, the clock.
+ * @returns {Promise<void>} Once every item is done.
+ * @example
+ * await eachInSlices(elements, (element) => styles.push(getComputedStyle(element).fontFamily));
+ */
+export declare function eachInSlices<T>(items: Iterable<T>, work: (item: T, index: number) => void, { sliceMs, pause, now }?: Pick<SliceOptions, 'sliceMs' | 'pause' | 'now'>): Promise<void>;
+/**
  * Work through a part of the page in slices: `work(block)` on each block
  * still in the page, the main thread handed back whenever a slice has run
  * `sliceMs`.
@@ -60,4 +75,4 @@ export type SliceOptions = {
  * @example
  * await inSlices(document.body, (block) => scanner.scan(block));
  */
-export declare function inSlices(root: Node, work: (block: Node) => void, { blockChars, sliceMs, pause, now }?: SliceOptions): Promise<void>;
+export declare function inSlices(root: Node, work: (block: Node) => void, { blockChars, ...options }?: SliceOptions): Promise<void>;

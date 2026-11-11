@@ -343,7 +343,8 @@ const stop = watchChanges(document.body, {
 
 `inSlices(root, work, {blockChars, sliceMs, pause})` cuts a page into blocks (`blocksOf`) and
 hands the main thread back whenever a slice has run its time, so a 2,000-item listing never
-freezes. `watchChanges` hands over what was added or changed a little after the page stops
+freezes. `eachInSlices(items, work, {sliceMs, pause})` does the same for any list (each element's
+style read, each text measured): `work(item, index)`. `watchChanges` hands over what was added or changed a little after the page stops
 changing (at most `maxWaitMs` while it keeps on); an element with a few children (`regroupChildren`,
 default 6) whose children changed is handed over whole. Both are pure DOM, so a content script
 imports them directly (list them in `web_accessible_resources`).

@@ -10,7 +10,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { RUNTIME_ENTRIES } from '../src/build/index.js';
-import { BLOCK_CHARS, blocksOf, inSlices, watchChanges } from '../src/index.js';
+import { BLOCK_CHARS, blocksOf, eachInSlices, inSlices, watchChanges } from '../src/index.js';
 
 /** @param {string} html */
 const page = (html) => new JSDOM(`<body>${html}</body>`).window;
@@ -41,6 +41,31 @@ describe('inSlices', () => {
     }, { blockChars: 25, sliceMs: 40, now: () => clock, pause: async () => { pauses += 1; } });
     assert.deepEqual(worked, ['p0', 'p1', 'p3', 'p4', 'p5'], 'p2 left the page first');
     assert.equal(pauses, 1, '60 ms of work in 40 ms slices');
+  });
+});
+
+describe('eachInSlices', () => {
+  it('works every item in order with its index, pausing whenever a slice has run its time', async () => {
+    let clock = 0;
+    /** @type {string[]} */
+    const log = [];
+    await eachInSlices(new Set(['a', 'b', 'c', 'd', 'e']), (item, index) => {
+      log.push(`${item}${index}`);
+      clock += 25;
+    }, { sliceMs: 40, now: () => clock, pause: async () => { log.push('pause'); } });
+    assert.deepEqual(log, ['a0', 'b1', 'pause', 'c2', 'd3', 'pause', 'e4']);
+  });
+
+  it('hands the main thread back for real by default: a timer set first runs between slices', async () => {
+    /** @type {string[]} */
+    const log = [];
+    setTimeout(() => log.push('page'), 0);
+    const end = Date.now() + 30;
+    await eachInSlices([1, 2], (item) => {
+      log.push(`work ${item}`);
+      if (item === 1) while (Date.now() < end) { /* a long piece of work */ }
+    }, { sliceMs: 10 });
+    assert.deepEqual(log, ['work 1', 'page', 'work 2']);
   });
 });
 

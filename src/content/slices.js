@@ -56,6 +56,32 @@ const nextTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
  */
 
 /**
+ * Work through any list in slices: `work(item, index)` on each, the main
+ * thread handed back whenever a slice has run `sliceMs`. For a content
+ * script's work that isn't cut by blocks of the page (each element's style
+ * read, each text measured).
+ *
+ * @template T
+ * @param {Iterable<T>} items - The items.
+ * @param {(item: T, index: number) => void} work - What to do with one.
+ * @param {Pick<SliceOptions, 'sliceMs' | 'pause' | 'now'>} [options] - Slice length, how to pause, the clock.
+ * @returns {Promise<void>} Once every item is done.
+ * @example
+ * await eachInSlices(elements, (element) => styles.push(getComputedStyle(element).fontFamily));
+ */
+export async function eachInSlices(items, work, { sliceMs = SLICE_MS, pause = nextTask, now = () => performance.now() } = {}) {
+  let started = now();
+  let index = 0;
+  for (const item of items) {
+    work(item, index++);
+    if (now() - started > sliceMs) {
+      await pause();
+      started = now();
+    }
+  }
+}
+
+/**
  * Work through a part of the page in slices: `work(block)` on each block
  * still in the page, the main thread handed back whenever a slice has run
  * `sliceMs`.
@@ -67,14 +93,7 @@ const nextTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
  * @example
  * await inSlices(document.body, (block) => scanner.scan(block));
  */
-export async function inSlices(root, work, { blockChars = BLOCK_CHARS, sliceMs = SLICE_MS, pause = nextTask, now = () => performance.now() } = {}) {
-  let started = now();
-  for (const block of blocksOf(root, blockChars)) {
-    if (!block.isConnected) continue;
-    work(block);
-    if (now() - started > sliceMs) {
-      await pause();
-      started = now();
-    }
-  }
+export function inSlices(root, work, { blockChars = BLOCK_CHARS, ...options } = {}) {
+  // A block the work before took out of the page is skipped.
+  return eachInSlices(blocksOf(root, blockChars), (block) => { if (block.isConnected) work(block); }, options);
 }
