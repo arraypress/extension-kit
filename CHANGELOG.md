@@ -5,7 +5,17 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.6.0] — Unreleased
+## [1.7.0] — Unreleased
+
+### Added
+
+- **Chrome's on-device model** (`ai/`, in the runtime half): `createModelSession` (one base session with the instructions, a `clone()` per question, every answer within its time limit through an `AbortSignal`, a cold start answered `'late'` while the session keeps loading for the next, `release`), `modelAvailability` (never throws; `'missing'` without a Prompt API), `downloadModel` (from a click, with Chrome's progress), `describeModel` and `MODEL_MESSAGES` (the settings page's words under standard keys), `chromeLanguageModel`. From Better Downloads' `ai/namer.js` and `ai/edge.js`; Topicless is the first user, Better Downloads and Tabby to follow.
+- **`createModelRow`** (`ui/`): the settings row “Chrome’s built-in AI”, its state, help and Download button with progress (Better Downloads' `options/model-section.js`).
+- **`fakeLanguageModel`** (`/testing`): the Prompt API's shape for tests, moved from Better Downloads' `test/fakes/fake-model.js`, with failed downloads and answers, `responseConstraint` and clones logged.
+- **Content-script helpers** (`content/`, in the runtime half): `inSlices` and `blocksOf` (a page worked through in blocks and slices that hand the main thread back) and `watchChanges` (one batch of what changed, the extension's own nodes ignored through `ignore`), from Better Prices' `content/slices.js` and `content/watch.js`, shared with Topicless.
+- **The text dialog's fields**: `multiline` (a textarea, `rows`), `hint` (help under the field, or a function of its text), and a `value` that's a promise (`waiting` shown, the field disabled until it comes). For Topicless' word lists, which Chrome's on-device model suggests.
+
+## [1.6.0] — 2026-11-11
 
 ### Added
 

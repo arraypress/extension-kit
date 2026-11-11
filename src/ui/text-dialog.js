@@ -19,8 +19,16 @@ import { focusedElement } from '../dom/focus.js';
  * @typedef {object} FieldRequest
  * @property {string} name Its key in the answer ("folder"), and part of its id.
  * @property {string} label Its label ("Folder").
- * @property {string} [value] The text to start with. Default ''.
+ * @property {string | Promise<string>} [value] The text to start with. Default ''. A promise is text
+ *   still being worked out (an on-device model's suggestion): the field waits, disabled, with
+ *   `waiting` under it, and takes the text when it comes ('' if it fails).
+ * @property {string} [waiting] What the field says while its `value` is worked out ("Finding words…").
  * @property {string} [placeholder] Shown while it's empty. Default none.
+ * @property {boolean} [multiline] A `<textarea>` (cr-textarea) rather than one line: Enter starts a new
+ *   line, and only the action button saves. Default false.
+ * @property {number} [rows] A multi-line field's height in lines. Default 6.
+ * @property {string | ((text: string) => string)} [hint] Help under the field (cr-input's
+ *   description), or a function of its text, kept up as it's typed ("12 words"). Default none.
  * @property {(text: string) => string | null} [validate] Why the (non-blank) text can't be used,
  *   shown under the field; null when it can. Default: anything but blank.
  * @property {number} [maxLength] Its `maxlength`. Default none.
@@ -74,14 +82,14 @@ export function checkText(text, validate = () => null) {
  *
  * @param {string} name - The field's name.
  * @param {boolean} only - Whether it's the dialog's only field.
- * @returns {{input: string, error: string}} The ids.
+ * @returns {{input: string, error: string, hint: string}} The ids.
  * @example
- * fieldIds('folder', false); // → {input: 'text-dialog-folder', error: 'text-dialog-folder-error'}
+ * fieldIds('folder', false); // → {input: 'text-dialog-folder', error: 'text-dialog-folder-error', hint: 'text-dialog-folder-hint'}
  */
 export function fieldIds(name, only) {
   return only
-    ? { input: 'text-dialog-input', error: 'text-dialog-error' }
-    : { input: `text-dialog-${name}`, error: `text-dialog-${name}-error` };
+    ? { input: 'text-dialog-input', error: 'text-dialog-error', hint: 'text-dialog-hint' }
+    : { input: `text-dialog-${name}`, error: `text-dialog-${name}-error`, hint: `text-dialog-${name}-hint` };
 }
 
 /**
@@ -101,8 +109,10 @@ export function fieldIds(name, only) {
  *
  * @typedef {object} Field
  * @property {FieldRequest} request What was asked.
- * @property {HTMLInputElement} input Its input.
+ * @property {HTMLInputElement | HTMLTextAreaElement} input Its input.
  * @property {HTMLElement} error The reason under it.
+ * @property {HTMLElement} hint The help under it.
+ * @property {boolean} waiting Whether its value is still being worked out.
  */
 
 /** Each page's dialog, made on first use. @type {WeakMap<Document, Parts>} */
@@ -161,14 +171,19 @@ function fieldFor(doc, request, only) {
   const row = element(doc, 'div', { class: 'field' });
   const label = element(doc, 'label', { for: ids.input });
   label.textContent = request.label;
-  const input = element(doc, 'input', { id: ids.input, type: 'text', autocomplete: 'off', 'aria-describedby': ids.error });
-  input.value = request.value ?? '';
+  const described = `${ids.error} ${ids.hint}`;
+  const input = request.multiline
+    ? element(doc, 'textarea', { id: ids.input, rows: String(request.rows ?? 6), 'aria-describedby': described })
+    : element(doc, 'input', { id: ids.input, type: 'text', autocomplete: 'off', 'aria-describedby': described });
+  input.value = typeof request.value === 'string' ? request.value : '';
   if (request.placeholder) input.placeholder = request.placeholder;
   if (request.maxLength !== undefined) input.maxLength = request.maxLength;
   const error = element(doc, 'span', { id: ids.error, class: 'hint error' });
   error.hidden = true;
-  row.append(label, input, error);
-  return { row, field: { request, input, error } };
+  const hint = element(doc, 'span', { id: ids.hint, class: 'hint secondary' });
+  hint.hidden = true;
+  row.append(label, input, error, hint);
+  return { row, field: { request, input, error, hint, waiting: false } };
 }
 
 /** The open dialog's settle function, per page. @type {WeakMap<Document, (answer: Record<string, string> | null) => void>} */
@@ -205,12 +220,14 @@ export function askFields({
   parts.confirm.textContent = action;
   parts.cancel.textContent = cancel;
 
-  const allOk = () => fields.every(({ input, request }) => checkText(input.value, request.validate).ok);
+  const allOk = () => fields.every(({ input, request, waiting }) => !waiting && checkText(input.value, request.validate).ok);
   /** @param {Field} field */
-  const refresh = ({ input, error, request }) => {
-    const { reason } = checkText(input.value, request.validate);
+  const refresh = ({ input, error, hint, request, waiting }) => {
+    const { reason } = waiting ? { reason: '' } : checkText(input.value, request.validate);
     error.textContent = reason;
     error.hidden = !reason;
+    hint.textContent = waiting ? request.waiting ?? '' : typeof request.hint === 'function' ? request.hint(input.value) : request.hint ?? '';
+    hint.hidden = !hint.textContent;
   };
   for (const field of fields) refresh(field);
   parts.confirm.disabled = !allOk();
@@ -232,8 +249,29 @@ export function askFields({
       });
     };
     pending.set(doc, settle);
+    let typed = false;
+    // A value still being worked out: the field waits, then takes it, unless the dialog has moved on.
+    for (const field of fields) {
+      const { value } = field.request;
+      if (typeof value !== 'object' || !value) continue;
+      field.waiting = true;
+      field.input.disabled = true;
+      refresh(field);
+      value.catch(() => '').then((text) => {
+        if (signal.aborted) return;
+        field.waiting = false;
+        field.input.disabled = false;
+        field.input.value = text;
+        refresh(field);
+        parts.confirm.disabled = !allOk();
+        // The person was waiting for it: the focus moves in, unless they've been typing meanwhile.
+        if (!typed) field.input.focus();
+      });
+    }
+    parts.confirm.disabled = !allOk();
     for (const field of fields) {
       field.input.addEventListener('input', () => {
+        typed = true;
         refresh(field);
         parts.confirm.disabled = !allOk();
       }, { signal });
@@ -256,7 +294,7 @@ export function askFields({
 
     parts.dialog.showModal();
     // The first field still to fill in, or the first, its text selected to type over.
-    (fields.find(({ input }) => !input.value) ?? fields[0])?.input.select();
+    (fields.find(({ input }) => !input.value && !input.disabled) ?? fields[0])?.input.select();
   });
 }
 
@@ -275,8 +313,8 @@ export function askFields({
  * });
  */
 export async function askText({
-  label, value, placeholder, validate, maxLength, ...dialog
+  label, value, placeholder, validate, maxLength, multiline, rows, hint, waiting, ...dialog
 }) {
-  const answer = await askFields({ ...dialog, fields: [{ name: 'input', label, value, placeholder, validate, maxLength }] });
+  const answer = await askFields({ ...dialog, fields: [{ name: 'input', label, value, placeholder, validate, maxLength, multiline, rows, hint, waiting }] });
   return answer?.input ?? null;
 }

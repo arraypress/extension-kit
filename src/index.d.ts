@@ -1,8 +1,9 @@
 /**
- * The kit's browser half: what an extension's pages, offscreen document and
- * service worker load, Chrome's page components (the ⋮ menu, the one-field
- * dialog, the toast with Undo, a settings card's site list) and per-site
- * lists' sites included. Every function takes the `chrome`
+ * The kit's browser half: what an extension's pages, offscreen document,
+ * service worker and content scripts load, Chrome's page components (the ⋮
+ * menu, the text dialog, the toast with Undo, a settings card's site list,
+ * the built-in AI row), per-site lists' sites, Chrome's on-device model, and
+ * a content script's slices and change watcher included. Every function takes the `chrome`
  * APIs it uses as arguments, so tests run the real logic against fakes.
  *
  * Build-time helpers are in `@arraypress/extension-kit/build`, test helpers
@@ -12,7 +13,10 @@
  * @module extension-kit
  */
 export { githubAboutLinks, isPlaceholder } from './about/links.js';
+export { MODEL_MESSAGES, chromeLanguageModel, createModelSession, describeModel, downloadModel, modelAvailability, } from './ai/model.js';
 export { setShortcuts } from './commands/shortcuts.js';
+export { BLOCK_CHARS, SLICE_MS, blocksOf, inSlices } from './content/slices.js';
+export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { focusedElement } from './dom/focus.js';
 export { localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
@@ -28,9 +32,21 @@ export { POLL_MS, watchSchemeOffscreen } from './toolbar/offscreen.js';
 export { DARK_QUERY, TOOLBAR_DARK_KEY, TOOLBAR_SCHEME, reportColorScheme, schemeSender, watchColorScheme } from './toolbar/scheme.js';
 export { OFFSCREEN_PATH, TOOLBAR_ICON_DIR, createToolbarTheme, startToolbarTheme, toolbarIcon, watchFromOffscreen, } from './toolbar/theme.js';
 export { MENU_EDGE, createMenu, isInside, menuPosition, moreActionsButton } from './ui/menu.js';
+export { createModelRow } from './ui/model-row.js';
 export { SITE_LIST_MESSAGES, SITE_LIST_WORDS, createSiteList } from './ui/site-list.js';
 export { askFields, askText, checkText, fieldIds } from './ui/text-dialog.js';
 export { TOAST_MS, createToast } from './ui/toast.js';
+export type Availability = import('./ai/model.js').Availability;
+export type InitialPrompt = import('./ai/model.js').InitialPrompt;
+export type LanguageModelOptions = import('./ai/model.js').LanguageModelOptions;
+export type LanguageModelSession = import('./ai/model.js').LanguageModelSession;
+export type LanguageModelStatic = import('./ai/model.js').LanguageModelStatic;
+export type ModelAnswer = import('./ai/model.js').ModelAnswer;
+export type ModelSession = import('./ai/model.js').ModelSession;
+export type ModelStatus = import('./ai/model.js').ModelStatus;
+export type SliceOptions = import('./content/slices.js').SliceOptions;
+export type WatchHandlers = import('./content/watch.js').WatchHandlers;
+export type ModelRow = import('./ui/model-row.js').ModelRow;
 export type ContentScript = import('./scripting/registration.js').ContentScript;
 export type ActionMenu = import('./ui/menu.js').ActionMenu;
 export type MenuEntry = import('./ui/menu.js').MenuEntry;
@@ -44,6 +60,17 @@ export type Toast = import('./ui/toast.js').Toast;
 /**
  * The page helpers' types, for a page's JSDoc.
  *
+ * @typedef {import('./ai/model.js').Availability} Availability
+ * @typedef {import('./ai/model.js').InitialPrompt} InitialPrompt
+ * @typedef {import('./ai/model.js').LanguageModelOptions} LanguageModelOptions
+ * @typedef {import('./ai/model.js').LanguageModelSession} LanguageModelSession
+ * @typedef {import('./ai/model.js').LanguageModelStatic} LanguageModelStatic
+ * @typedef {import('./ai/model.js').ModelAnswer} ModelAnswer
+ * @typedef {import('./ai/model.js').ModelSession} ModelSession
+ * @typedef {import('./ai/model.js').ModelStatus} ModelStatus
+ * @typedef {import('./content/slices.js').SliceOptions} SliceOptions
+ * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers
+ * @typedef {import('./ui/model-row.js').ModelRow} ModelRow
  * @typedef {import('./scripting/registration.js').ContentScript} ContentScript
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
  * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry

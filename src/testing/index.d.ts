@@ -1,5 +1,5 @@
 /**
- * The kit's test helpers: a fake `chrome.storage`, Playwright helpers for
+ * The kit's test helpers: a fake `chrome.storage`, a fake on-device model, Playwright helpers for
  * end-to-end tests (time limits, a pool, a browser that passes for a
  * person's) and a server for their pages, Chrome's install warnings and
  * saved tab groups, and checks for a packaging test. Node only.
@@ -12,12 +12,15 @@ export { CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExten
 export { exitPoint, parseLiveOptions, parseProxy } from './live.js';
 export { eachLimited } from '../time/pool.js';
 export { filesIn, launchDownloading } from './downloads.js';
+export { fakeLanguageModel } from './fake-model.js';
 export { serve, testCertificate } from './server.js';
 export { SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';
 export { savedTabGroups } from './saved-groups.js';
 export { installWarnings, warningsAddedBy, withoutPermissions } from './warnings.js';
 export type CheckRunner = import('./e2e.js').CheckRunner;
+export type FakeLanguageModel = import('./fake-model.js').FakeLanguageModel;
+export type FakeModelState = import('./fake-model.js').FakeModelState;
 export type ExtensionProfile = import('./e2e.js').ExtensionProfile;
 export type LaunchedExtension = import('./e2e.js').LaunchedExtension;
 export type LaunchOptions = import('./e2e.js').LaunchOptions;
@@ -32,6 +35,8 @@ export type TestServer = import('./server.js').TestServer;
  * The helpers' types, for a test's JSDoc.
  *
  * @typedef {import('./e2e.js').CheckRunner} CheckRunner
+ * @typedef {import('./fake-model.js').FakeLanguageModel} FakeLanguageModel
+ * @typedef {import('./fake-model.js').FakeModelState} FakeModelState
  * @typedef {import('./e2e.js').ExtensionProfile} ExtensionProfile
  * @typedef {import('./e2e.js').LaunchedExtension} LaunchedExtension
  * @typedef {import('./e2e.js').LaunchOptions} LaunchOptions

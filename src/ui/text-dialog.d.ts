@@ -20,13 +20,33 @@ export type FieldRequest = {
      */
     label: string;
     /**
-     * The text to start with. Default ''.
+     * The text to start with. Default ''. A promise is text
+     * still being worked out (an on-device model's suggestion): the field waits, disabled, with
+     * `waiting` under it, and takes the text when it comes ('' if it fails).
      */
-    value?: string;
+    value?: string | Promise<string>;
+    /**
+     * What the field says while its `value` is worked out ("Finding words…").
+     */
+    waiting?: string;
     /**
      * Shown while it's empty. Default none.
      */
     placeholder?: string;
+    /**
+     * A `<textarea>` (cr-textarea) rather than one line: Enter starts a new
+     * line, and only the action button saves. Default false.
+     */
+    multiline?: boolean;
+    /**
+     * A multi-line field's height in lines. Default 6.
+     */
+    rows?: number;
+    /**
+     * Help under the field (cr-input's
+     * description), or a function of its text, kept up as it's typed ("12 words"). Default none.
+     */
+    hint?: string | ((text: string) => string);
     /**
      * Why the (non-blank) text can't be used,
      * shown under the field; null when it can. Default: anything but blank.
@@ -71,8 +91,16 @@ export type FieldsRequest = DialogRequest & {
  * @typedef {object} FieldRequest
  * @property {string} name Its key in the answer ("folder"), and part of its id.
  * @property {string} label Its label ("Folder").
- * @property {string} [value] The text to start with. Default ''.
+ * @property {string | Promise<string>} [value] The text to start with. Default ''. A promise is text
+ *   still being worked out (an on-device model's suggestion): the field waits, disabled, with
+ *   `waiting` under it, and takes the text when it comes ('' if it fails).
+ * @property {string} [waiting] What the field says while its `value` is worked out ("Finding words…").
  * @property {string} [placeholder] Shown while it's empty. Default none.
+ * @property {boolean} [multiline] A `<textarea>` (cr-textarea) rather than one line: Enter starts a new
+ *   line, and only the action button saves. Default false.
+ * @property {number} [rows] A multi-line field's height in lines. Default 6.
+ * @property {string | ((text: string) => string)} [hint] Help under the field (cr-input's
+ *   description), or a function of its text, kept up as it's typed ("12 words"). Default none.
  * @property {(text: string) => string | null} [validate] Why the (non-blank) text can't be used,
  *   shown under the field; null when it can. Default: anything but blank.
  * @property {number} [maxLength] Its `maxlength`. Default none.
@@ -120,13 +148,14 @@ export declare function checkText(text: string, validate?: (text: string) => str
  *
  * @param {string} name - The field's name.
  * @param {boolean} only - Whether it's the dialog's only field.
- * @returns {{input: string, error: string}} The ids.
+ * @returns {{input: string, error: string, hint: string}} The ids.
  * @example
- * fieldIds('folder', false); // → {input: 'text-dialog-folder', error: 'text-dialog-folder-error'}
+ * fieldIds('folder', false); // → {input: 'text-dialog-folder', error: 'text-dialog-folder-error', hint: 'text-dialog-folder-hint'}
  */
 export declare function fieldIds(name: string, only: boolean): {
     input: string;
     error: string;
+    hint: string;
 };
 export type Parts = {
     /**
@@ -162,11 +191,19 @@ export type Field = {
     /**
      * Its input.
      */
-    input: HTMLInputElement;
+    input: HTMLInputElement | HTMLTextAreaElement;
     /**
      * The reason under it.
      */
     error: HTMLElement;
+    /**
+     * The help under it.
+     */
+    hint: HTMLElement;
+    /**
+     * Whether its value is still being worked out.
+     */
+    waiting: boolean;
 };
 /**
  * Ask for several pieces of text in the page's dialog, one field each.
@@ -199,4 +236,4 @@ export declare function askFields({ title, fields: requests, action, cancel, ret
  *   validate: (text) => (siteFromInput(text) ? null : 'Enter a site, like example.com'),
  * });
  */
-export declare function askText({ label, value, placeholder, validate, maxLength, ...dialog }: TextRequest): Promise<string | null>;
+export declare function askText({ label, value, placeholder, validate, maxLength, multiline, rows, hint, waiting, ...dialog }: TextRequest): Promise<string | null>;

@@ -311,6 +311,64 @@ describe('text dialog (Chromium)', () => {
     assert.equal(await answer(page), null);
     await page.close();
   });
+
+  it('a multi-line field waits, disabled, for a value still being worked out, then takes it, its hint kept up as it’s typed', async () => {
+    const page = await open();
+    await page.evaluate(() => {
+      const globals = /** @type {PageGlobals & {fill: (text: string) => void}} */ (/** @type {unknown} */ (window));
+      globals.answer = 'pending';
+      const words = new Promise((resolve) => { globals.fill = resolve; });
+      globals.kit.askFields({
+        title: 'Add topic', action: 'Add',
+        fields: [
+          { name: 'name', label: 'Topic', value: 'Football' },
+          {
+            name: 'words', label: 'Words', multiline: true, rows: 4, value: /** @type {Promise<string>} */ (words), waiting: 'Finding words…',
+            hint: (text) => `${text.split('\n').filter(Boolean).length} words`,
+          },
+        ],
+      }).then((answer) => { globals.answer = JSON.stringify(answer); });
+    });
+    const dialog = page.getByRole('dialog', { name: 'Add topic' });
+    const words = dialog.getByRole('textbox', { name: 'Words' });
+    const add = dialog.getByRole('button', { name: 'Add' });
+    assert.equal(await words.evaluate((element) => element.localName), 'textarea');
+    assert.equal(await words.getAttribute('rows'), '4');
+    assert.equal(await words.isDisabled(), true);
+    assert.equal(await add.isDisabled(), true, 'nothing to add until the words come');
+    assert.equal(await page.locator('#text-dialog-words-hint').innerText(), 'Finding words…');
+    await page.evaluate(() => /** @type {{fill: (text: string) => void}} */ (/** @type {unknown} */ (window)).fill('football\npremier league'));
+    await until(() => words.isEnabled(), 'the words');
+    assert.equal(await words.inputValue(), 'football\npremier league');
+    assert.equal(await page.locator('#text-dialog-words-hint').innerText(), '2 words');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'text-dialog-words', 'the focus moves in');
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    assert.equal(await dialog.isVisible(), true, 'Enter is a new line in a multi-line field');
+    await page.keyboard.type('fa cup');
+    assert.equal(await page.locator('#text-dialog-words-hint').innerText(), '3 words');
+    await add.click();
+    assert.deepEqual(JSON.parse(String(await answer(page))), { name: 'Football', words: 'football\npremier league\nfa cup' });
+    await page.close();
+  });
+
+  it('a value that fails leaves the field empty to type into', async () => {
+    const page = await open();
+    await page.evaluate(() => {
+      const globals = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+      globals.answer = 'pending';
+      globals.kit.askText({ title: 'Words', label: 'Words', multiline: true, value: Promise.reject(new Error('no model')), hint: 'One per line' })
+        .then((text) => { globals.answer = text; });
+    });
+    const words = page.getByRole('textbox', { name: 'Words' });
+    await until(() => words.isEnabled(), 'the field');
+    assert.equal(await words.inputValue(), '');
+    assert.equal(await page.locator('#text-dialog-hint').innerText(), 'One per line');
+    await page.keyboard.type('spoiler');
+    await page.getByRole('button', { name: 'Save' }).click();
+    assert.equal(await answer(page), 'spoiler');
+    await page.close();
+  });
 });
 
 /**

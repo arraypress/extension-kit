@@ -14,6 +14,11 @@ The pieces ArrayPress's Chrome extensions share, so each is written once:
   ("Rename folder", or several fields as "Add site search"), the toast with Undo and a settings card's site list, built on the
   stylesheet's classes; they work in a content script's shadow root too.
 - **Sites**: what people type into a per-site list, and whether a page is on one.
+- **Chrome's on-device model** (Gemini Nano, the Prompt API): availability, a download from the
+  person's click with progress, one base session with a `clone()` per question, a time limit on
+  every answer, cold starts, and the settings page's “Chrome’s built-in AI” row.
+- **Content-script helpers**: a big page worked through in slices that never hold it long, and a
+  change watcher for single-page apps and endless lists.
 - **Build and test helpers** (Node): icon rendering, vendoring npm packages (with a staleness
   check), test builds, store screenshots, zipping for the Chrome Web Store, a fake
   `chrome.storage`, Playwright helpers with time limits, packaging checks, and a copied-code guard.
@@ -211,6 +216,81 @@ Registers, updates or unregisters the script `id` to match what `want()` gives a
 none). Calls run one after another, so a quick run of changes can't register twice or end out of
 order; a refused change rejects that call only.
 
+## Chrome's on-device model
+
+```js
+import { chromeLanguageModel, createModelSession } from '../vendor/extension-kit/index.js';
+
+const ENGLISH = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] };
+const model = createModelSession({
+  model: chromeLanguageModel,           // read when used: Chrome may add it after start-up
+  options: ENGLISH,                     // availability() is asked with what create() gets
+  initialPrompts: [{ role: 'system', content: 'You name downloaded files.' }, ...EXAMPLE],
+});
+const answer = await model.ask(prompt, { timeoutMs: 2500, signal, responseConstraint: schema });
+if (answer.text === null) useRules(answer.reason); // 'unavailable' | 'late' | 'aborted' | 'failed'
+```
+
+Following https://developer.chrome.com/docs/ai/prompt-api: only an `available` model is used (a
+question never downloads it); one base session is made when first needed and kept; each question
+goes to a `clone()` of it, let go after; the answer's `AbortSignal` fires at the time limit. The
+first session after Chrome starts can take ~18 s while the model loads: a question with a shorter
+limit comes back `'late'`, and the session goes on loading for the next one. Nothing loads it ahead
+of time (that would load the model on every start). `release()` lets the base session go.
+
+`modelAvailability(api, options)` never throws (`'missing'` without a Prompt API).
+`downloadModel(api, options, {onProgress})` is the only `create()` that may download: call it
+first in a click's handler, with nothing awaited before it. The settings row:
+
+```html
+<div class="row two-line">
+  <span class="label">
+    <span data-i18n="optionsModel">Chrome’s built-in AI</span>
+    <span class="secondary"><span id="model-status"></span> <span id="model-help" hidden></span></span>
+    <progress id="model-progress" max="1" value="0" hidden></progress>
+  </span>
+  <button id="model-download" type="button" data-i18n="optionsModelDownload" hidden>Download</button>
+</div>
+```
+
+```js
+const row = createModelRow(
+  { status: byId('model-status'), help: byId('model-help'), download: byId('model-download', HTMLButtonElement), progress: byId('model-progress', HTMLProgressElement) },
+  { options: ENGLISH, state: () => ask(MESSAGES.modelState), t, onShown: ({ state }) => { useAi.disabled = state === 'off'; } },
+);
+await row.refresh();
+```
+
+Its words are the page's messages under `MODEL_MESSAGES`' keys (`optionsModel`, `optionsModelReady`,
+`optionsModelNeedsDownload`, `optionsModelDownloadHelp`, `optionsModelDownload`,
+`optionsModelDownloading` with `$PERCENT$`, `optionsModelDownloadFailed`, `optionsModelUnsupported`,
+`optionsModelRequirements`, `optionsModelMissing`, `optionsModelMissingHelp`); `describeModel` maps
+a state to them. Tests use `fakeLanguageModel` (`/testing`), the Prompt API's shape: availability,
+download progress (or a failed download), a cold start, slow and failed answers, aborts, and a log
+of what it was asked.
+
+## Content scripts
+
+```js
+import { inSlices } from '../vendor/extension-kit/content/slices.js';
+import { watchChanges } from '../vendor/extension-kit/content/watch.js';
+
+await inSlices(document.body, (block) => scanner.scan(block)); // ≤4,000 characters a block, 40 ms slices
+const stop = watchChanges(document.body, {
+  changed: (nodes) => nodes.forEach((node) => scanner.scan(node)), // one batch, each subtree once
+  removed: (node) => scanner.forget(node),                         // at once
+  ignore: (node) => node instanceof Element && node.localName === 'my-note', // the extension's own
+  settleMs: 120, maxWaitMs: 600,
+});
+```
+
+`inSlices(root, work, {blockChars, sliceMs, pause})` cuts a page into blocks (`blocksOf`) and
+hands the main thread back whenever a slice has run its time, so a 2,000-item listing never
+freezes. `watchChanges` hands over what was added or changed a little after the page stops
+changing (at most `maxWaitMs` while it keeps on); an element with a few children (`regroupChildren`,
+default 6) whose children changed is handed over whole. Both are pure DOM, so a content script
+imports them directly (list them in `web_accessible_resources`).
+
 ## Time limits
 
 ```js
@@ -273,7 +353,11 @@ const site = await askText({
 });
 ```
 
-Resolves to the text, trimmed, or `null` when cancelled. The action button (default "Save") stays
+Resolves to the text, trimmed, or `null` when cancelled. A field can be `multiline` (a textarea,
+`rows` high: Enter starts a new line), carry a `hint` under it (or a function of its text, kept up
+as it's typed: “12 words”), and take a `value` that's still being worked out (a promise, say an
+on-device model's suggestion): the field waits, disabled, with `waiting` under it, then takes the
+text and the focus (unless the person has typed meanwhile); a failed one leaves it empty. The action button (default "Save") stays
 disabled while the text is blank or `validate` gives a reason, which shows under the field
 (`checkText` is that rule, pure). Enter presses the action button; Esc and Cancel cancel; the
 focus goes back to what had it, or to `returnTo` (an element, or a function asked at the end).
@@ -389,6 +473,7 @@ except those listed, each with a reason:
 
 | Export | What it does |
 |---|---|
+| `fakeLanguageModel(state)` | A fake Prompt API (`LanguageModel`): `availability`, `create` (download progress, a cold start, `failDownload`), sessions that `clone`, answer (`answerMs`, `answer(prompt)`, `failPrompt`) and stop on their signal; `log` of what it was asked, `set` to change it. Browser-safe, so a test build can put it on `globalThis`. |
 | `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`: JSON copies, `onChanged` for real changes only, sync's 8,192-byte item quota and 120 writes a minute. `settled()` waits for listeners. |
 | `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
 | `launchDownloading(chromium, dir, options)`, `filesIn(dir)` | An extension in a browser that downloads for real: `{…launchExtension's, downloads}`, the profile's own Downloads folder (Playwright otherwise saves downloads under made-up names no extension sees); the files under a folder, downloads still running left out. |
