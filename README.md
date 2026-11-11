@@ -474,7 +474,7 @@ except those listed, each with a reason:
 | Export | What it does |
 |---|---|
 | `fakeLanguageModel(state)` | A fake Prompt API (`LanguageModel`): `availability`, `create` (download progress, a cold start, `failDownload`), sessions that `clone`, answer (`answerMs`, `answer(prompt)`, `failPrompt`) and stop on their signal; `log` of what it was asked, `set` to change it. Browser-safe, so a test build can put it on `globalThis`. |
-| `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`: JSON copies, `onChanged` for real changes only, sync's 8,192-byte item quota and 120 writes a minute. `settled()` waits for listeners. |
+| `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`: JSON copies, `onChanged` for real changes only, sync's 8,192-byte item quota, its 102,400 bytes in all (`SYNC_QUOTA_BYTES`) and 120 writes a minute. `settled()` waits for listeners. |
 | `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
 | `launchDownloading(chromium, dir, options)`, `filesIn(dir)` | An extension in a browser that downloads for real: `{…launchExtension's, downloads}`, the profile's own Downloads folder (Playwright otherwise saves downloads under made-up names no extension sees); the files under a folder, downloads still running left out. |
 | `extensionProfile(chromium, dir, options)` | A profile to start the browser on more than once (a restart, a first start with a changed manifest): `{dir, launch(), remove()}`. |

@@ -49,6 +49,8 @@ export type FakeChromeStorage = {
      */
     settled: () => Promise<void>;
 };
+/** All of sync's items together may take this many bytes (`chrome.storage.sync.QUOTA_BYTES`). */
+export declare const SYNC_QUOTA_BYTES = 102400;
 /**
  * Make a fake `chrome.storage`.
  *

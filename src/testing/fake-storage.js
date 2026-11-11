@@ -49,6 +49,17 @@ export const SYNC_WRITES_PER_MINUTE = 120;
  */
 const viaJson = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
+/** All of sync's items together may take this many bytes (`chrome.storage.sync.QUOTA_BYTES`). */
+export const SYNC_QUOTA_BYTES = 102_400;
+
+/**
+ * The bytes an area's items take, as Chrome counts sync's: each key plus its value's JSON, in UTF-8.
+ *
+ * @param {Record<string, unknown>} items - The items.
+ * @returns {number} Bytes.
+ */
+const totalBytes = (items) => Object.entries(items).reduce((sum, [key, value]) => sum + new TextEncoder().encode(key + JSON.stringify(value)).length, 0);
+
 /**
  * Make a fake `chrome.storage`.
  *
@@ -72,10 +83,10 @@ export function fakeChromeStorage({ local = {}, sync = {}, session = {}, now = D
   /**
    * @param {string} name
    * @param {Record<string, unknown>} initialData
-   * @param {{quotaPerItem?: number, writesPerMinute?: number}} [limits]
+   * @param {{quotaPerItem?: number, quotaBytes?: number, writesPerMinute?: number}} [limits]
    * @returns {FakeArea}
    */
-  function area(name, initialData, { quotaPerItem, writesPerMinute } = {}) {
+  function area(name, initialData, { quotaPerItem, quotaBytes, writesPerMinute } = {}) {
     /** @type {Record<string, any>} */
     const data = viaJson(initialData);
     /** @type {number[]} */
@@ -108,6 +119,7 @@ export function fakeChromeStorage({ local = {}, sync = {}, session = {}, now = D
             throw new Error('Resource::kQuotaBytesPerItem quota exceeded');
           }
         }
+        if (quotaBytes && totalBytes({ ...data, ...items }) > quotaBytes) throw new Error('Resource::kQuotaBytes quota exceeded');
         take();
         /** @type {Record<string, StorageChange>} */
         const changes = {};
@@ -135,7 +147,7 @@ export function fakeChromeStorage({ local = {}, sync = {}, session = {}, now = D
 
   return {
     local: area('local', local),
-    sync: area('sync', sync, { quotaPerItem: MAX_SYNC_ITEM_BYTES, writesPerMinute: SYNC_WRITES_PER_MINUTE }),
+    sync: area('sync', sync, { quotaPerItem: MAX_SYNC_ITEM_BYTES, quotaBytes: SYNC_QUOTA_BYTES, writesPerMinute: SYNC_WRITES_PER_MINUTE }),
     session: area('session', session),
     onChanged: { addListener: (listener) => listeners.push(listener) },
     async settled() {

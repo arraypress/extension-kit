@@ -15,7 +15,7 @@ export { filesIn, launchDownloading } from './downloads.js';
 export { fakeLanguageModel } from './fake-model.js';
 export { messageLookup, readMessages } from './messages.js';
 export { serve, testCertificate } from './server.js';
-export { SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
+export { SYNC_QUOTA_BYTES, SYNC_WRITES_PER_MINUTE, fakeChromeStorage } from './fake-storage.js';
 export { filesUnder, manifestReferences, missingReferences, referencedPath, zipEntries } from './package.js';
 export { savedTabGroups } from './saved-groups.js';
 export { installWarnings, warningsAddedBy, withoutPermissions } from './warnings.js';

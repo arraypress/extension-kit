@@ -1,7 +1,7 @@
 import { afterEach, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSettingsSaver, createSettingsStore } from '../src/index.js';
-import { fakeChromeStorage } from '../src/testing/index.js';
+import { SYNC_QUOTA_BYTES, fakeChromeStorage } from '../src/testing/index.js';
 
 /** @import { FakeChromeStorage } from '../src/testing/fake-storage.js' */
 
@@ -119,6 +119,19 @@ describe('settings store', () => {
     assert.deepEqual(storage.sync.data, { theme: 'dark' });
     assert.equal((await store.load(storage)).sites.length, 500);
     assert.equal(warn.mock.callCount(), 0); // Known too big: not even tried.
+  });
+});
+
+describe('fakeChromeStorage’s sync quotas', () => {
+  it('refuses a write that takes sync past 102,400 bytes in all, as Chrome does, and keeps what it had', async () => {
+    const storage = fakeChromeStorage();
+    const item = 'x'.repeat(8000);
+    for (let i = 0; i < 12; i++) await storage.sync.set({ [`k${i}`]: item });
+    await assert.rejects(storage.sync.set({ k12: item }), /kQuotaBytes quota exceeded/);
+    assert.equal(Object.keys(storage.sync.data).length, 12);
+    await storage.sync.set({ k0: 'small' });
+    await storage.sync.set({ k12: item });
+    assert.equal(SYNC_QUOTA_BYTES, 102_400);
   });
 });
 
