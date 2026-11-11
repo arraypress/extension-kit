@@ -206,6 +206,18 @@ scale. Chrome draws an SVG image with HTML inside (`foreignObject`) without tain
 (checked in Chromium, `tests/frame-chromium.test.js`). Images in it must be `data:` URLs
 (`letterIcon` makes one). `THEMES` holds the light and dark colours.
 
+A plain macOS window (1.9.0) draws the same way: `macWindowSvg({ title, theme, w })` is its title
+bar, `w` wide and `MAC_TITLE_BAR` (28px) high: the traffic lights (the same markup as Chrome's
+strip), the title centred, a hairline below. The canvas draws the rest: corners of `WINDOW_RADIUS`
+(10px, macOS's and Chrome's window's) and the theme's shadow, `THEMES[theme].windowShadow`
+(`{ y, blur, color }` for a canvas's `shadowOffsetY`, `shadowBlur`, `shadowColor`; `THEMES[theme].shadow`
+is the same shadow as CSS, the store frame's).
+
+```js
+context.shadowColor = THEMES.light.windowShadow.color; // and its blur and y, at the scale
+context.roundRect(x, y, w * scale, (MAC_TITLE_BAR + contentHeight) * scale, WINDOW_RADIUS * scale);
+```
+
 ## Sites
 
 ```js

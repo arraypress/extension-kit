@@ -23,7 +23,7 @@ export { BLOCK_CHARS, SLICE_MS, blocksOf, inSlices } from './content/slices.js';
 export { pageOverlay } from './content/overlay.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { focusedElement } from './dom/focus.js';
-export { THEMES, WINDOW_BARS, WINDOW_W, letterIcon, windowChrome, windowChromeSvg } from './frame/window.js';
+export { MAC_TITLE_BAR, THEMES, WINDOW_BARS, WINDOW_RADIUS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
 export { localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
@@ -65,6 +65,7 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers
  * @typedef {import('./frame/window.js').Tab} WindowTab
  * @typedef {import('./frame/window.js').Theme} WindowTheme
+ * @typedef {import('./frame/window.js').WindowShadow} WindowShadow
  * @typedef {import('./ui/model-row.js').ModelRow} ModelRow
  * @typedef {import('./scripting/registration.js').ContentScript} ContentScript
  * @typedef {import('./scripting/call.js').FrameResult<unknown>} FrameResult
