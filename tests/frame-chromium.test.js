@@ -3,14 +3,15 @@
  * `windowChromeSvg` and `macWindowSvg`, with their HTML inside, drawn on a canvas, leave the
  * canvas readable (an SVG image with a `foreignObject` doesn't taint it in Chrome) and paint the
  * theme's colours where the tab strip, the active tab, the toolbar, the title bar and its
- * hairline are, and macOS's traffic lights where both put them.
+ * hairline are, macOS's traffic lights where each puts them, and the title after them as
+ * macOS 26 and later place it.
  *
  * @module tests/frame-chromium
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { MAC_TITLE_BAR, THEMES, WINDOW_BARS, letterIcon, macWindowSvg, windowChromeSvg } from '../src/index.js';
+import { MAC_WINDOW, THEMES, WINDOW_BARS, letterIcon, macWindowSvg, windowChromeSvg } from '../src/index.js';
 
 /** @import { Browser } from 'playwright' */
 
@@ -83,19 +84,19 @@ describe('windowChromeSvg (Chromium)', () => {
 
 describe('macWindowSvg (Chromium)', () => {
   for (const theme of /** @type {const} */ (['light', 'dark'])) {
-    it(`a plain macOS title bar on a canvas, readable afterwards: the ${theme} theme, the traffic lights, the title centred`, async () => {
+    it(`a plain macOS title bar on a canvas, readable afterwards: the ${theme} theme, the traffic lights, the title after them`, async () => {
       const svg = macWindowSvg({ title: 'Lake District trips', theme, w: 600 });
-      const { size, pixels, ink } = await drawn(browser, svg, [[14, 14], [34, 14], [54, 14], [500, 4], [500, MAC_TITLE_BAR - 0.5], [80, 14]]);
-      assert.deepEqual(size, [600, MAC_TITLE_BAR]);
+      const { size, pixels, ink } = await drawn(browser, svg, [[16, 16], [39, 16], [62, 16], [500, 4], [500, MAC_WINDOW.titleBar - 0.5], [78, 16]]);
+      assert.deepEqual(size, [600, MAC_WINDOW.titleBar]);
       assert.deepEqual(pixels.slice(0, 3), LIGHTS);
       assert.equal(pixels[3], rgb(THEMES[theme].titleBar));
       const grey = pixels[3].split(',').map(Number).reduce((sum, value) => sum + value, 0) / 3;
       assert.ok(theme === 'dark' ? grey < 80 : grey > 200, `a ${theme} bar: ${pixels[3]}`);
-      assert.equal(pixels[4], rgb(THEMES[theme].contentLine));
+      assert.equal(pixels[4], rgb(THEMES[theme].titleLine));
       assert.equal(pixels[5], rgb(THEMES[theme].titleBar), 'nothing between the lights and the title');
-      // The title's ink: some width of it, around the middle.
+      // The title's ink: some width of it, starting 16px after the zoom button (at 85px), as AppKit puts it.
       assert.ok(ink[1] - ink[0] >= 80, `the title is drawn: ${ink}`);
-      assert.ok(Math.abs((ink[0] + ink[1]) / 2 - 300) <= 3, `centred: ${ink}`);
+      assert.ok(ink[0] >= 85 && ink[0] <= 88, `after the buttons: ${ink}`);
     });
   }
 

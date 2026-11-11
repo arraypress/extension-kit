@@ -20,7 +20,7 @@ export { BLOCK_CHARS, SLICE_MS, blocksOf, eachInSlices, inSlices } from './conte
 export { pageOverlay } from './content/overlay.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { focusedElement } from './dom/focus.js';
-export { MAC_TITLE_BAR, THEMES, WINDOW_BARS, WINDOW_RADIUS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
+export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
 export { localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';

@@ -8,8 +8,10 @@
  * use it.
  *
  * Window metrics follow Chrome's 2023 refresh on macOS (tabs 34px high in a 42px strip, a 46px
- * toolbar with a pill omnibox) and AppKit's titled window (a 28px title bar, 12px traffic lights
- * 8px apart, corners of 10px).
+ * toolbar with a pill omnibox) and AppKit's titled window as macOS 26 and later draw it, measured
+ * on macOS 27.2 (`NSThemeFrame`'s `cornerRadius` 16, a 32pt title bar, the window buttons 14pt
+ * at 9, 32 and 55 from the left and 9 from the top, the title in the 13pt headline font at 85,
+ * after the buttons).
  *
  * @module frame/window
  */
@@ -17,11 +19,8 @@
 /** The tab strip's and the toolbar's heights (px): the content starts below both. */
 export const WINDOW_BARS = Object.freeze({ strip: 42, toolbar: 46 });
 
-/** A plain macOS window's title bar height (px): the content starts below it. */
-export const MAC_TITLE_BAR = 28;
-
-/** A macOS window's corner radius (px), Chrome's window's too (Big Sur to Sequoia). */
-export const WINDOW_RADIUS = 10;
+/** A plain macOS window (macOS 26 and later): its title bar's height and its corners' radius (px). */
+export const MAC_WINDOW = Object.freeze({ titleBar: 32, radius: 16 });
 
 /** The window's default width (px): the store screenshot's. */
 export const WINDOW_W = 1152;
@@ -95,22 +94,23 @@ const SHADOWS = {
 const boxShadow = (shadow, rim) => `0 ${shadow.y}px ${shadow.blur}px ${shadow.color}, 0 0 0 .5px ${rim}`;
 
 /**
- * Chrome's light and dark window colours, a macOS title bar's (`titleBar`), the canvas behind,
- * and the window's shadow (`windowShadow` for a canvas's `shadow*`, `shadow` for CSS).
+ * Chrome's light and dark window colours, a macOS title bar's (`titleBar`, and `titleLine` below
+ * it, as AppKit draws them), the canvas behind, and the window's shadow (`windowShadow` for a
+ * canvas's `shadow*`, `shadow` for CSS).
  */
 export const THEMES = {
   light: {
     bg: '#eef2f8', caption: '#1f1f1f', sub: '#444746',
     frame: '#dde3ea', tabText: '#1f1f1f', tabTextInactive: '#474747', tabSep: '#a8afb8', activeTab: '#ffffff',
     toolbar: '#ffffff', toolbarIcon: '#474747', omnibox: '#e9eef6', url: '#1f1f1f', urlDim: '#5e5e5e',
-    contentLine: '#d3d7dc', titleBar: '#ececec',
+    contentLine: '#d3d7dc', titleBar: '#ffffff', titleLine: '#eaeaea',
     windowShadow: SHADOWS.light, shadow: boxShadow(SHADOWS.light, 'rgba(0,0,0,.18)'),
   },
   dark: {
     bg: '#1b1c1f', caption: '#e3e3e3', sub: '#c4c7c5',
     frame: '#1f1f1f', tabText: '#e3e3e3', tabTextInactive: '#c7c7c7', tabSep: '#5f6368', activeTab: '#3c3c3c',
     toolbar: '#3c3c3c', toolbarIcon: '#c7c7c7', omnibox: '#282828', url: '#e3e3e3', urlDim: '#a8a8a8',
-    contentLine: '#2a2a2a', titleBar: '#323232',
+    contentLine: '#2a2a2a', titleBar: '#282828', titleLine: '#3c3c3c',
     windowShadow: SHADOWS.dark, shadow: boxShadow(SHADOWS.dark, 'rgba(255,255,255,.14)'),
   },
 };
@@ -118,19 +118,18 @@ export const THEMES = {
 /** The traffic lights' colours: close, minimise, zoom. */
 const LIGHTS = ['#ff5f57', '#febc2e', '#28c840'];
 
-/** The traffic lights' styles: 12px circles 8px apart, a faint edge. */
-const LIGHTS_CSS = `.lights { position: absolute; display: flex; gap: 8px; }
-    .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }`;
+/** The traffic lights' styles: circles with a faint edge, their size and spacing set where they're placed. */
+const LIGHTS_CSS = `.lights { position: absolute; display: flex; }
+    .lights i { width: var(--light); height: var(--light); border-radius: 50%; display: block; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }`;
 
 /**
  * macOS's traffic lights (styled by {@link LIGHTS_CSS}).
  *
- * @param {number} left - The first one's left edge (px).
- * @param {number} top - Their top edge.
+ * @param {{left: number, top: number, size: number, gap: number}} place - The first one's left edge, their top edge, their size and the space between them (px).
  * @returns {string} The HTML.
  */
-const trafficLights = (left, top) =>
-  `<span class="lights" style="left:${left}px;top:${top}px">${LIGHTS.map((color) => `<i style="background:${color}"></i>`).join('')}</span>`;
+const trafficLights = ({ left, top, size, gap }) =>
+  `<span class="lights" style="left:${left}px;top:${top}px;gap:${gap}px;--light:${size}px">${LIGHTS.map((color) => `<i style="background:${color}"></i>`).join('')}</span>`;
 
 /** @typedef {keyof typeof THEMES} Theme */
 
@@ -195,7 +194,7 @@ export function windowChrome({ tabs, url, urlHost, theme = 'light', w = WINDOW_W
   const extIcons = ext.map((src) => `<img src="${src}" width="16" height="16" alt="" style="margin:0 9px"/>`).join('');
   return `
   <div class="strip">
-    ${trafficLights(16, 15)}
+    ${trafficLights({ left: 16, top: 15, size: 12, gap: 8 })}
     ${tabHtml}
     <span class="plus" style="left:${plusX}px">${icon('add', 18)}</span>
   </div>
@@ -248,8 +247,8 @@ export function windowChromeSvg(options) {
 }
 
 /**
- * A plain macOS window's title bar, as HTML: the traffic lights at the left, the title centred
- * between them and the right edge's matching room, a hairline below.
+ * A plain macOS window's title bar, as HTML: the traffic lights at the left, the title after
+ * them (macOS 26 on), a hairline below.
  *
  * @param {object} options - What to draw.
  * @param {string} options.title - The window's title.
@@ -260,18 +259,18 @@ export function windowChromeSvg(options) {
 function macTitleBar({ title, theme = 'light', w = WINDOW_W }) {
   const t = THEMES[theme];
   return `
-  <div class="bar" style="width:${w}px">${trafficLights(8, 8)}<span class="title">${esc(title)}</span></div>
+  <div class="bar" style="width:${w}px">${trafficLights({ left: 9, top: 9, size: 14, gap: 9 })}<span class="title">${esc(title)}</span></div>
   <style>
-    .bar { position: relative; height: ${MAC_TITLE_BAR}px; background: ${t.titleBar}; border-bottom: 1px solid ${t.contentLine}; box-sizing: border-box; }
+    .bar { position: relative; height: ${MAC_WINDOW.titleBar}px; background: ${t.titleBar}; border-bottom: 1px solid ${t.titleLine}; box-sizing: border-box; }
     ${LIGHTS_CSS}
-    .title { position: absolute; left: 76px; right: 76px; top: 0; text-align: center; color: ${t.tabText}; font: 600 13px/${MAC_TITLE_BAR - 1}px system-ui; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .title { position: absolute; left: 85px; right: 16px; top: 0; color: ${t.tabText}; font: 600 13px/${MAC_WINDOW.titleBar - 1}px system-ui; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>`;
 }
 
 /**
- * A plain macOS window's title bar as a standalone SVG image, `w` wide and {@link MAC_TITLE_BAR}
+ * A plain macOS window's title bar as a standalone SVG image, `w` wide and `MAC_WINDOW.titleBar`
  * high (scale it when drawing), for an extension page to draw on a canvas as
- * {@link windowChromeSvg}'s bars are drawn. The window's corners ({@link WINDOW_RADIUS}) and its
+ * {@link windowChromeSvg}'s bars are drawn. The window's corners (`MAC_WINDOW.radius`) and its
  * shadow (`THEMES[theme].windowShadow`) are the canvas's to draw.
  *
  * @param {Parameters<typeof macTitleBar>[0]} options - As {@link macTitleBar}.
@@ -281,7 +280,7 @@ function macTitleBar({ title, theme = 'light', w = WINDOW_W }) {
  */
 export function macWindowSvg(options) {
   const w = options.w ?? WINDOW_W;
-  return svgImage(macTitleBar({ ...options, w }), w, MAC_TITLE_BAR);
+  return svgImage(macTitleBar({ ...options, w }), w, MAC_WINDOW.titleBar);
 }
 
 /**
