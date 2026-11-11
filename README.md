@@ -221,6 +221,28 @@ withSite(['a.com', 'b.com'], 'a.com');       // ['b.com', 'a.com'], what a list 
 A site is http or https with a dot in its host (or `localhost`); text without a scheme is https;
 `localhost:8080` is a host and port. Pure, so a content script can load `sites/sites.js` alone.
 
+## A page's side
+
+```js
+// In the worker or a page: call content/main.js's `scan` in the tab's frames (main.js and what it
+// imports listed in web_accessible_resources). The module stays loaded between calls.
+const frames = await callInPage(chrome.scripting, { tabId, allFrames: true }, 'content/main.js', 'scan', [options]);
+for (const { frameId, result } of frames) show(frameId, result);
+
+// From the toolbar click: the tab's own side panel, panel/panel.html?tab=<id>, nothing awaited first.
+chrome.action.onClicked.addListener((tab) => openSidePanel(chrome.sidePanel, tab.id, 'panel/panel.html'));
+
+// In the content script: a layer the page's styles can't touch (a closed shadow root).
+const { root, remove } = pageOverlay(document, { name: 'my-inspector', css: ':host { position: fixed; inset: 0; pointer-events: none; }' });
+```
+
+`callInPage(scripting, target, module, name, args, {immediately})` resolves to each frame's
+`{frameId, result}` (frames Chrome couldn't run in left out) and rejects when it can run in none;
+`immediately` (default true) doesn't wait for the page to be idle. `openSidePanel` sets the tab's
+panel to `path?tab=<id>` (`sidePanelPath`) and opens it in the same moment: Chrome opens a panel
+only while the click counts. `pageOverlay` puts a host element of its own name (`all: initial`)
+on the root element, replacing one a run before left; `root` is its closed shadow root, `css` first.
+
 ## A content script on every site
 
 ```js

@@ -2,8 +2,9 @@
  * The kit's browser half: what an extension's pages, offscreen document,
  * service worker and content scripts load, Chrome's page components (the ⋮
  * menu, the text dialog, the toast with Undo, a settings card's site list,
- * the built-in AI row), Chrome's window drawn around a capture, per-site lists' sites, Chrome's on-device model, and
- * a content script's slices and change watcher included. Every function takes the `chrome`
+ * the built-in AI row), Chrome's window drawn around a capture, per-site lists' sites, Chrome's on-device model,
+ * a content script's slices, change watcher and overlay, a module's function called in a page,
+ * and a tab's side panel opened from a click. Every function takes the `chrome`
  * APIs it uses as arguments, so tests run the real logic against fakes.
  *
  * Build-time helpers are in `@arraypress/extension-kit/build`, test helpers
@@ -19,12 +20,15 @@ export {
 } from './ai/model.js';
 export { setShortcuts } from './commands/shortcuts.js';
 export { BLOCK_CHARS, SLICE_MS, blocksOf, inSlices } from './content/slices.js';
+export { pageOverlay } from './content/overlay.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { focusedElement } from './dom/focus.js';
 export { THEMES, WINDOW_BARS, WINDOW_W, letterIcon, windowChrome, windowChromeSvg } from './frame/window.js';
 export { localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
+export { openSidePanel, sidePanelPath } from './panel/side-panel.js';
+export { callInPage, importAndCall } from './scripting/call.js';
 export { contentScriptSync } from './scripting/registration.js';
 export { createSettingsSaver } from './settings/saver.js';
 export { MAX_SYNC_ITEM_BYTES } from './settings/storage.js';
@@ -57,11 +61,13 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./ai/model.js').ModelSession} ModelSession
  * @typedef {import('./ai/model.js').ModelStatus} ModelStatus
  * @typedef {import('./content/slices.js').SliceOptions} SliceOptions
+ * @typedef {import('./content/overlay.js').PageOverlay} PageOverlay
  * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers
  * @typedef {import('./frame/window.js').Tab} WindowTab
  * @typedef {import('./frame/window.js').Theme} WindowTheme
  * @typedef {import('./ui/model-row.js').ModelRow} ModelRow
  * @typedef {import('./scripting/registration.js').ContentScript} ContentScript
+ * @typedef {import('./scripting/call.js').FrameResult<unknown>} FrameResult
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
  * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem

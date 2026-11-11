@@ -5,7 +5,15 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0] — Unreleased
+## [1.9.0] — Unreleased
+
+### Added
+
+- **`callInPage(scripting, target, module, name, args)`** (`scripting/call.js`): one of an extension module's exports called in a page's isolated world (`executeScript` of a function that imports the module), each frame's result with its `frameId`; the module and its state stay loaded between calls. From Better Screenshots' `callPage`; Better Fonts uses it for its scan, inspector and highlights.
+- **`openSidePanel(sidePanel, tabId, path)`** and `sidePanelPath` (`panel/side-panel.js`, a new runtime folder): a tab's own side panel opened from a click, nothing awaited before `open`. From Better Saves' `background/panel.js` (it can switch); Better Fonts opens its panel with it.
+- **`pageOverlay(doc, {name, css})`** (`content/overlay.js`): a content script's layer over the page, a host element with a closed shadow root and its styles, replacing one a run before left. The same few lines were in Better Screenshots' pickers, Better Prices' toast and Topicless' bar (they can switch); Better Fonts' inspector draws in it.
+
+## [1.8.0] — 2026-11-11
 
 ### Added
 
