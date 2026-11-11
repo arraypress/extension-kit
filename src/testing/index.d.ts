@@ -10,6 +10,7 @@ export { TEST_BUILDS_ENV, testBuildDir } from '../build/test-build.js';
 export { chromeUserAgent, closeOnSignal, realisticBrowser } from './browser.js';
 export { CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, runChecks, until, } from './e2e.js';
 export { exitPoint, parseLiveOptions, parseProxy } from './live.js';
+export { liveUsage, runLiveCheck } from './live-run.js';
 export { eachLimited } from '../time/pool.js';
 export { filesIn, launchDownloading } from './downloads.js';
 export { fakeLanguageModel } from './fake-model.js';
@@ -32,6 +33,7 @@ export type Messages = import('./messages.js').Messages;
 export type CdpNode = import('./pages.js').CdpNode;
 export type Exit = import('./live.js').Exit;
 export type LiveOptions = import('./live.js').LiveOptions;
+export type LiveSite = import('./live-run.js').LiveSite;
 export type SavedTabGroup = import('./saved-groups.js').SavedTabGroup;
 export type Manifest = import('./warnings.js').Manifest;
 export type Reply = import('./server.js').Reply;
@@ -50,6 +52,7 @@ export type TestServer = import('./server.js').TestServer;
  * @typedef {import('./pages.js').CdpNode} CdpNode
  * @typedef {import('./live.js').Exit} Exit
  * @typedef {import('./live.js').LiveOptions} LiveOptions
+ * @typedef {import('./live-run.js').LiveSite} LiveSite
  * @typedef {import('./saved-groups.js').SavedTabGroup} SavedTabGroup
  * @typedef {import('./warnings.js').Manifest} Manifest
  * @typedef {import('./server.js').Reply} Reply

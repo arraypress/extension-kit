@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`noticeCard({icon, tone, title, text, buttons, actions})`** (`ui/notice.js`) and chrome-ui.css's `.sp-notice`: a side panel's notice card (frames from other sites to allow, a font that didn't load). From Better Fonts' `panel/render.js`.
 - **`counted(count, one, many, {t, lang})`** (`dom/i18n.js`): a count in words, the number as the language writes it. From Better Fonts' panel.
 - **`/testing`: `tabIdOf`, `callTabModule`, `pierceNodes`, `nodeAttribute`, `nodeText`**: a page's tab id, the page module called in its frames, and its whole tree through CDP (closed shadow roots, frames). From Better Fonts' e2e helpers.
+- **`runLiveCheck`** and `liveUsage` (`/testing`): a live checker's whole run (command line, sites chosen, exit point, browsers a slot each, time limits, Ctrl-C), from Better Fonts' `test/live/run.mjs`; Better Colours' checker uses it.
 - **`buildTestCopy`'s `panelOpener`** and `PANEL_OPENER` (`/build`): the test page that opens the real side panel from a click, from Better Fonts' and Better Saves' copies of `open-panel.html`.
 
 ### Fixed

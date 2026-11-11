@@ -161,3 +161,43 @@ describe('heartbeat (Chromium)', () => {
     }
   });
 });
+
+describe('runLiveCheck (Chromium)', () => {
+  it('visits the chosen sites a slot at a time with the extension loaded, replaces a browser whose page ran out of time, and reports in order', async () => {
+    const { runLiveCheck } = await import('../src/testing/index.js');
+    const site = await serve({ '/one': '<title>One</title>', '/two': '<title>Two</title>', '/three': '<title>Three</title>', '/four': '<title>Four</title>' });
+    const root = await mkdtemp(path.join(tmpdir(), 'extension-kit-live-'));
+    try {
+      await withExtension({}, async (dir) => {
+        const sites = ['one', 'two', 'three', 'four'].map((name) => ({ name, url: `${site.origin}/${name}`, category: name === 'one' ? 'a' : 'b' }));
+        /** @type {string[]} */
+        const lines = [];
+        /** @type {unknown[]} */
+        const browsers = [];
+        const run = await runLiveCheck({
+          chromium, build: dir, prefix: 'kit-live-', root, sites, categories: ['a', 'b'], pageMs: 3000,
+          visit: async (browser, page, each) => {
+            browsers.push(browser);
+            assert.ok(browser.extensionId, 'the extension is loaded');
+            await page.goto(each.url);
+            if (each.name === 'three') await new Promise(() => {});
+            return { title: await page.title() };
+          },
+          failed: (_, error) => ({ title: '', error }),
+          onResult: (result) => lines.push(result.site.name),
+          command: { argv: ['--category', 'b', '--concurrency', '1'], env: {}, findExit: async () => null },
+        });
+        assert.deepEqual(run.results.map((result) => [result.site.name, result.visit]), [['two', { title: 'Two' }], ['three', { title: '', error: 'timed out' }], ['four', { title: 'Four' }]]);
+        assert.deepEqual(lines, ['two', 'three', 'four']);
+        assert.equal(run.dir, path.join(root, 'test', 'live', 'report'));
+        assert.equal(run.exit, null);
+        assert.deepEqual(run.browser, { locale: 'en-GB', timezone: 'Europe/London', proxy: '' });
+        assert.equal(browsers[0], browsers[1], 'one slot, one browser');
+        assert.notEqual(browsers[2], browsers[1], 'a new browser after the one whose page ran out of time');
+      });
+    } finally {
+      await site.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
