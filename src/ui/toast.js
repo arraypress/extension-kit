@@ -2,6 +2,9 @@
  * Chrome's toast (cr-toast), bottom left, as chrome://bookmarks shows one
  * after a delete: "Deleted “Research”  Undo". One per page, made by
  * {@link createToast}; a new message replaces the last and restarts the wait.
+ * While the keyboard focus is on Undo, or the pointer is over the toast, it
+ * stays, and the wait starts again in full once they leave (cr-toast stops
+ * its timer on `focusin` and restarts it on `focusout`).
  *
  * It's a manual `popover`, so it shows in the top layer: over anything the
  * page stacks (a content script's toast over a site's own fixed bars), and
@@ -75,11 +78,27 @@ export function createToast({ undoLabel = 'Undo', duration = TOAST_MS, undoDurat
   /** @type {(() => unknown) | null} */
   let undoLast = null;
 
+  /** How long the toast showing now stays, once nothing holds it. */
+  let stay = duration;
+
   const hide = () => {
     clearTimeout(timer);
     toast.togglePopover(false);
     undoLast = null;
   };
+  /** Whether the keyboard focus is in the toast (on Undo) or the pointer over it: it stays while either is. */
+  const held = () => toast.matches(':focus-within, :hover');
+  /** The wait starts again, in full, unless the toast is held: as cr-toast's, whose focusout restarts it. */
+  const wait = () => {
+    clearTimeout(timer);
+    if (!held() && toast.matches(':popover-open')) timer = setTimeout(hide, stay);
+  };
+  // cr-toast stops its timer on focusin and restarts it on focusout, so Undo can't go from under
+  // the keyboard; the pointer over it holds it the same way (WCAG 2.2.1, Timing Adjustable).
+  toast.addEventListener('focusin', () => clearTimeout(timer));
+  toast.addEventListener('pointerenter', () => clearTimeout(timer));
+  toast.addEventListener('focusout', () => queueMicrotask(wait));
+  toast.addEventListener('pointerleave', wait);
   undoButton.addEventListener('click', () => {
     const undo = undoLast;
     hide();
@@ -98,7 +117,8 @@ export function createToast({ undoLabel = 'Undo', duration = TOAST_MS, undoDurat
       // Hidden and shown again, so it's the newest in the top layer (over a popover since).
       toast.togglePopover(false);
       toast.togglePopover(true);
-      timer = setTimeout(hide, undo ? undoDuration : duration);
+      stay = undo ? undoDuration : duration;
+      wait();
     },
     hide,
   };

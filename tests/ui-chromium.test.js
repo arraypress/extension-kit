@@ -554,6 +554,55 @@ describe('in a shadow root (Chromium)', () => {
   });
 });
 
+describe('a ⋮ button that shows only while its row is hovered or holds the focus (Chromium)', () => {
+  /** A side-panel row whose ⋮ button sits in an `.sp-suffix`, far from the window's corner. */
+  const withPanelRow = async () => {
+    const page = await open();
+    await page.evaluate(() => {
+      const { kit } = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+      document.body.insertAdjacentHTML('beforeend', `<ul class="sp-list" style="position: fixed; left: 300px; top: 300px; width: 320px">
+        <li class="sp-item" id="panel-row"><button class="sp-item-main" type="button" aria-label="Open"></button><span class="sp-text"><span class="sp-title">Research</span></span><span class="sp-suffix" id="suffix"></span></li></ul>`);
+      const menu = kit.createMenu({ id: 'panel-menu' });
+      const more = kit.moreActionsButton('Research', { onClick: (button) => menu.open([{ label: 'Rename', run: () => {} }], { anchor: button }) });
+      document.getElementById('suffix')?.append(more);
+      Object.assign(window, { panelMenu: menu, more });
+    });
+    return page;
+  };
+  /** @param {Page} page */
+  const placed = (page) => page.evaluate(() => {
+    const menu = /** @type {HTMLElement} */ (document.getElementById('panel-menu')).getBoundingClientRect();
+    const row = /** @type {HTMLElement} */ (document.getElementById('panel-row')).getBoundingClientRect();
+    const more = /** @type {any} */ (window).more.getBoundingClientRect();
+    return { menuRight: Math.round(menu.right), menuTop: Math.round(menu.top), rowRight: Math.round(row.right), rowTop: Math.round(row.top), buttonWidth: more.width, buttonRight: Math.round(more.right), buttonTop: Math.round(more.top) };
+  });
+
+  it('opened from the keyboard, the menu is over its button, which stays shown under it; the focus goes back to it', async () => {
+    const page = await withPanelRow();
+    assert.equal(await page.locator('#suffix').isVisible(), false, 'hidden until the row is hovered or focused');
+    await page.locator('.sp-item-main').focus();
+    await page.keyboard.press('Tab'); // To the ⋮ button, shown now the row holds the focus.
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Rename' }).waitFor();
+    const at = await placed(page);
+    assert.equal(at.buttonWidth, 24, 'the button is still drawn while its menu is open');
+    assert.deepEqual([at.menuRight, at.menuTop], [at.buttonRight, at.buttonTop]);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => document.activeElement === /** @type {any} */ (window).more), true);
+    await page.close();
+  });
+
+  it('opened for a button that isn’t drawn at all (a row’s Menu key), the menu opens from the row, not the window’s corner', async () => {
+    const page = await withPanelRow();
+    await page.evaluate(() => /** @type {any} */ (window).more.click());
+    await page.getByRole('menuitem', { name: 'Rename' }).waitFor();
+    const at = await placed(page);
+    assert.ok(at.menuTop >= at.rowTop && at.menuTop < at.rowTop + 48, `beside the row: ${JSON.stringify(at)}`);
+    assert.ok(at.menuRight > 400, `not in the corner: ${JSON.stringify(at)}`);
+    await page.close();
+  });
+});
+
 describe('toast (Chromium)', () => {
   /**
    * A fresh page with the toast made, on a fake clock.
@@ -579,6 +628,14 @@ describe('toast (Chromium)', () => {
     const win = /** @type {any} */ (window);
     win.toast.show(text, undo ? () => { win.undone++; } : null);
   }, { text, undo });
+
+  /** The toast is still up a millisecond before its full wait is over, and gone when it is. @param {Page} page */
+  const goesAfterTheFullWait = async (page) => {
+    await page.clock.runFor(TOAST_MS - 1);
+    assert.equal(await showing(page), true);
+    await page.clock.runFor(1);
+    assert.equal(await showing(page), false);
+  };
 
   it('is a polite live region from the start, a closed manual popover until shown', async () => {
     const page = await withToast();
@@ -629,12 +686,28 @@ describe('toast (Chromium)', () => {
     await page.clock.runFor(TOAST_MS - 1000);
     await show(page, 'Copied');
     assert.equal(await page.locator('#toast-undo').isVisible(), false);
-    await page.clock.runFor(TOAST_MS - 1);
-    assert.equal(await showing(page), true);
-    await page.clock.runFor(1);
-    assert.equal(await showing(page), false);
+    await goesAfterTheFullWait(page);
     await page.locator('#toast-undo').evaluate((button) => /** @type {HTMLButtonElement} */ (button).click());
     assert.equal(await page.evaluate(() => /** @type {any} */ (window).undone), 0);
+    await page.close();
+  });
+
+  it('stays while the keyboard focus is on Undo or the pointer is over it, and the wait starts again in full once they leave', async () => {
+    const page = await withToast();
+    await show(page, 'Deleted “Research”', true);
+    await page.clock.runFor(TOAST_MS - 1000);
+    await page.locator('#toast-undo').focus();
+    await page.clock.runFor(TOAST_MS * 3);
+    assert.equal(await showing(page), true, 'Undo can’t go from under the keyboard');
+    await page.locator('#far').focus();
+    await goesAfterTheFullWait(page); // The full wait again, as cr-toast's focusout.
+
+    await show(page, 'Deleted “Reading”', true);
+    await page.locator('#toast').hover();
+    await page.clock.runFor(TOAST_MS * 3);
+    assert.equal(await showing(page), true, 'held under the pointer');
+    await page.mouse.move(600, 10);
+    await goesAfterTheFullWait(page);
     await page.close();
   });
 

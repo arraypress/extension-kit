@@ -102,6 +102,20 @@ export function isInside(box, x, y) {
 }
 
 /**
+ * The box a menu opens from: the anchor's, or, when the anchor has none (it isn't drawn: a row's
+ * buttons shown only while the row is hovered or holds the focus), its nearest ancestor's that has.
+ *
+ * @param {Element} anchor - The button that opened the menu.
+ * @returns {DOMRect | undefined} The box; undefined when nothing up to the root is drawn.
+ */
+function anchorBox(anchor) {
+  for (let at = /** @type {Element | null} */ (anchor); at; at = at.parentElement) {
+    if (at.getClientRects().length) return at.getBoundingClientRect();
+  }
+  return undefined;
+}
+
+/**
  * What {@link createMenu} takes.
  *
  * @typedef {object} MenuOptions
@@ -240,10 +254,13 @@ export function createMenu({ id, placement = 'over', root, doc = rootDocument(ro
         anchor.setAttribute('aria-expanded', 'true');
         expanded = anchor;
       }
+      // Measured before the menu opens: it takes the focus, and a button shown only while its row
+      // holds the focus (`.sp-suffix`) has no box after that, so the menu would open in the corner.
+      const from = anchor && anchorBox(anchor);
       menu.showModal();
       const { width, height } = menu.getBoundingClientRect();
       const { left, top } = menuPosition({ width, height }, { width: view.innerWidth, height: view.innerHeight }, {
-        anchor: anchor?.getBoundingClientRect(), x, y, placement, rtl: view.getComputedStyle(menu).direction === 'rtl',
+        anchor: from, x, y, placement, rtl: view.getComputedStyle(menu).direction === 'rtl',
       });
       menu.style.left = `${left}px`;
       menu.style.top = `${top}px`;

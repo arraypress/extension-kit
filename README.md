@@ -511,7 +511,10 @@ button (or `focusTo`); an item runs once the menu has closed. `createMenu({id, p
 opens it below the button instead. `menuPosition` and `isInside` are the pure geometry. In a
 content script, give it the overlay's shadow root (`createMenu({root})`, a closed one too): the
 keys it handles don't reach the page's own shortcuts, and `destroy()` takes it off the page with
-its window listener. On a right-to-left page it lines up with its button's other edge.
+its window listener. On a right-to-left page it lines up with its button's other edge. The
+button's box is read before the menu opens (opening takes the focus, and a button shown only
+while its row holds the focus has no box after); a button that isn't drawn opens it from its
+nearest drawn ancestor, the row.
 
 `moreActionsButton(name, options)` is the 32px ⋮ icon button, labelled "More actions for “name”"
 (`label` for a translation), with `aria-haspopup="menu"`; its icon is the stylesheet's
@@ -570,7 +573,9 @@ toast.show('Copied'); // no Undo
 `#toast` (`role="status"`), bottom left, a manual `popover` so it's in the top layer, over
 anything the page stacks (`:popover-open` while it shows). A new message replaces the last and
 restarts the wait: 10 seconds, as chrome://bookmarks's (`TOAST_MS`), or `duration` /
-`undoDuration`. Undo hides it and runs once. `undoLabel` translates the button.
+`undoDuration`. Undo hides it and runs once. `undoLabel` translates the button. While the keyboard
+focus is on Undo, or the pointer is over the toast, it stays; the wait starts again in full once
+they leave (as cr-toast, which stops its timer on `focusin`).
 
 ### Site list
 

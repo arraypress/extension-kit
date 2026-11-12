@@ -5,7 +5,14 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.11.0] — unreleased
+## [1.11.1] — unreleased
+
+### Fixed
+
+- **A ⋮ menu opened from the keyboard opens over its button, not in the window's corner.** The menu measured its button after opening, and opening takes the focus: a button shown only while its row is hovered or holds the focus (a side panel row's `.sp-suffix`, as in Tabby's panel) had no box by then. The button's box is read before the menu opens; a button that isn't drawn at all (a row's Menu key or Shift+F10 while its buttons are hidden) gives its nearest drawn ancestor's box, the row's. chrome-ui.css keeps a row's `.sp-suffix` shown while one of its buttons has its menu open (`aria-expanded="true"`), so the button the focus returns to doesn't vanish under the menu.
+- **The toast stays while the keyboard focus is on Undo, or the pointer is over it**, and its wait starts again in full once they leave: its timer ran out under a keyboard user who had tabbed to Undo. As Chrome's own cr-toast, which stops its timer on `focusin` and restarts it on `focusout` (`cr_toast.ts`); the pointer holds it the same way (WCAG 2.2.1). `showPageToast` has no action to reach and is unchanged.
+
+## [1.11.0] — 2026-11-12
 
 Fixes from a review of the whole kit, and what the extensions' own fixes needed shared.
 

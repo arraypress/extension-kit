@@ -1085,7 +1085,10 @@ label.row, .row[actionable] { cursor: pointer; }
     margin-inline: 8px -4px;
 }
 
+/* Shown too while one of its buttons has its menu open: the menu is modal and takes the focus and
+   the pointer, and the button it opened from (where the focus goes back) would vanish under it. */
 .sp-item:is(:hover, :focus-within) .sp-suffix,
+.sp-suffix:has([aria-expanded="true"]),
 .sp-suffix.always { display: flex; }
 
 /* .sp-notice (ui/notice.js): a card saying what a list leaves out or can't do; a warning's icon in
