@@ -6,7 +6,8 @@
  *   extension-kit vendor <dir> <package> <path>...  copy files of an installed package into <dir>
  *                                                   (a path ending in / copies its contents)
  *   extension-kit vendor-check [dir]                fail when a copy in [dir] (default extension/vendor)
- *                                                   no longer matches the installed package
+ *                                                   no longer matches the installed package (another
+ *                                                   version, other files, edited since), or there's none
  *   extension-kit icons [dir]                       render [dir]/icon.svg (default extension/icons)
  *   extension-kit toolbar-icons [dir]               render the toolbar glyph (default extension/icons/toolbar)
  *   extension-kit duplication                       fail on copied code jscpd finds, less .jscpd-allowlist.json

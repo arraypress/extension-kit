@@ -99,7 +99,8 @@ describe('vendoring', () => {
     assert.ok(!files.some((file) => file.startsWith('build/') || file.startsWith('testing/')), 'no Node-only code');
     assert.deepEqual(new Set(files.map((file) => file.split('/')[0])), new Set([...RUNTIME_ENTRIES, VENDOR_STAMP]));
     const kit = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-    assert.deepEqual(JSON.parse(await readFile(path.join(dest, VENDOR_STAMP), 'utf8')), { package: kit.name, version: kit.version });
+    const stamp = JSON.parse(await readFile(path.join(dest, VENDOR_STAMP), 'utf8'));
+    assert.deepEqual({ ...stamp, hash: stamp.hash.length }, { package: kit.name, version: kit.version, hash: 64 });
     assert.equal(await readFile(path.join(dest, 'styles', 'chrome-ui.css'), 'utf8'), await readFile(STYLESHEET, 'utf8'));
   }));
 
@@ -135,7 +136,8 @@ describe('vendoring a package', () => {
     assert.deepEqual(await vendorPackage('@scope/lib', ['dist/lib.esm.js', 'rules/rules.json', 'LICENSE'], dest, { from: dir }),
       ['lib.esm.js', 'rules.json', 'LICENSE']);
     assert.deepEqual(await filesUnder(dest), ['LICENSE', 'lib.esm.js', 'rules.json', VENDOR_STAMP]);
-    assert.deepEqual(JSON.parse(await readFile(path.join(dest, VENDOR_STAMP), 'utf8')), { package: '@scope/lib', version: '2.0.0' });
+    const stamp = JSON.parse(await readFile(path.join(dest, VENDOR_STAMP), 'utf8'));
+    assert.deepEqual({ ...stamp, hash: stamp.hash.length }, { package: '@scope/lib', version: '2.0.0', files: ['dist/lib.esm.js', 'rules/rules.json', 'LICENSE'], hash: 64 });
     await vendorPackage('@scope/lib', ['src/'], dest, { from: path.join(dir, 'extension') });
     assert.deepEqual(await filesUnder(dest), ['index.js', 'parse.js', VENDOR_STAMP]);
     await assert.rejects(vendorPackage('@scope/missing', ['x.js'], dest, { from: dir }), /@scope\/missing isn't installed/);
@@ -152,7 +154,41 @@ describe('vendoring a package', () => {
     assert.deepEqual(await checkVendored(vendor, { from: dir }), [`${path.join(vendor, 'lib')} is @scope/lib 2.0.0; 2.1.0 is installed`]);
     await rm(path.join(dir, 'node_modules', '@scope'), { recursive: true });
     assert.deepEqual(await checkVendored(vendor, { from: dir }), [`${path.join(vendor, 'lib')} is @scope/lib 2.0.0, which isn't installed`]);
-    assert.deepEqual(await checkVendored(path.join(dir, 'nothing-here'), { from: dir }), []);
+    assert.deepEqual(await checkVendored(path.join(dir, 'nothing-here'), { from: dir }), [`${path.join(dir, 'nothing-here')} has no vendored copies (no vendored.json in it)`]);
+  }));
+
+  it('checkVendored: a copy edited by hand, or a package whose files changed under the same version, is stale too', () => inTemp(async (dir) => {
+    await install(dir, '2.0.0');
+    const vendor = path.join(dir, 'extension', 'vendor');
+    const lib = path.join(vendor, 'lib');
+    await vendorPackage('@scope/lib', ['src/', 'LICENSE'], lib, { from: dir });
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), []);
+    await writeFile(path.join(lib, 'parse.js'), 'export const parse = 1; // a quick try');
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), [`${lib} has changed since it was copied from @scope/lib 2.0.0`]);
+    await vendorPackage('@scope/lib', ['src/', 'LICENSE'], lib, { from: dir });
+    await writeFile(path.join(lib, 'generated.js'), '');
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), [], 'a file a script wrote beside the copy is no change');
+    await rm(path.join(lib, 'index.js'));
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), [`${lib} has changed since it was copied from @scope/lib 2.0.0`], 'a copied file gone');
+    await vendorPackage('@scope/lib', ['src/', 'LICENSE'], lib, { from: dir });
+    // The library copied into node_modules to try a fix, its version as it was; postinstall not rerun.
+    await writeFile(path.join(dir, 'node_modules/@scope/lib/src/parse.js'), 'export const parse = 2;');
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), [`${lib} is @scope/lib 2.0.0, but the installed 2.0.0's files are different`]);
+    await vendorPackage('@scope/lib', ['src/', 'LICENSE'], lib, { from: dir });
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), []);
+    // A copy stamped before hashes: its version alone is checked.
+    await writeFile(path.join(lib, VENDOR_STAMP), JSON.stringify({ package: '@scope/lib', version: '2.0.0' }));
+    assert.deepEqual(await checkVendored(vendor, { from: dir }), []);
+  }));
+
+  it('refuses two paths that would land in the same place, and a destination that holds an extension or a project', () => inTemp(async (dir) => {
+    await install(dir, '2.0.0');
+    await writeTree(dir, { 'node_modules/@scope/lib/rules/index.js': '', 'extension/manifest.json': '{}', 'extension/popup.js': 'mine' });
+    const dest = path.join(dir, 'extension', 'vendor', 'lib');
+    await assert.rejects(vendorPackage('@scope/lib', ['src/index.js', 'rules/index.js'], dest, { from: dir }), /src\/index\.js and rules\/index\.js would both be copied to index\.js/);
+    await assert.rejects(vendorPackage('@scope/lib', ['src/'], path.join(dir, 'extension'), { from: dir }), /holds a manifest\.json: it isn't a vendor folder/);
+    await assert.rejects(vendorKit(dir), /holds a package\.json/);
+    assert.equal(await readFile(path.join(dir, 'extension', 'popup.js'), 'utf8'), 'mine');
   }));
 
   it('extension-kit vendor and vendor-check, as npm scripts run them', () => inTemp(async (dir) => {
