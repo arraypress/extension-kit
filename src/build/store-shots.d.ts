@@ -52,7 +52,8 @@ export type MenuItem = {
  */
 /**
  * The right-click menu as macOS draws Chrome's (a native menu): rounded, translucent, 13px rows,
- * the row under the pointer in the accent colour; a submenu beside its highlighted row.
+ * the row under the pointer in the accent colour; a submenu beside its highlighted row. Its class
+ * names start `ctx` (the window's own styles have `.sep`, `.tab`…).
  *
  * @param {object} menu - What to draw.
  * @param {number} menu.x - Its left edge, in the window's content area (px).

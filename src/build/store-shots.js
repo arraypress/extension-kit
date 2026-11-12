@@ -40,7 +40,8 @@ const PANEL_HEADER_H = 40;
 
 /**
  * The right-click menu as macOS draws Chrome's (a native menu): rounded, translucent, 13px rows,
- * the row under the pointer in the accent colour; a submenu beside its highlighted row.
+ * the row under the pointer in the accent colour; a submenu beside its highlighted row. Its class
+ * names start `ctx` (the window's own styles have `.sep`, `.tab`…).
  *
  * @param {object} menu - What to draw.
  * @param {number} menu.x - Its left edge, in the window's content area (px).
@@ -52,8 +53,8 @@ const PANEL_HEADER_H = 40;
 export function contextMenuHtml({ x, y, items, submenu }) {
   /** @param {readonly MenuItem[]} rows @returns {string} */
   const list = (rows) => rows.map((row) => (row.label === undefined
-    ? '<div class="sep"></div>'
-    : `<div class="row${row.highlighted ? ' on' : ''}${row.disabled ? ' off' : ''}"><span class="ic">${row.icon ? `<img src="${row.icon}" width="16" height="16" alt="">` : ''}</span><span class="label">${esc(row.label)}</span>${row.submenu ? '<span class="arrow">›</span>' : ''}</div>`)).join('');
+    ? '<div class="ctx-sep"></div>'
+    : `<div class="ctx-row${row.highlighted ? ' on' : ''}${row.disabled ? ' off' : ''}"><span class="ctx-ic">${row.icon ? `<img src="${row.icon}" width="16" height="16" alt="">` : ''}</span><span class="ctx-label">${esc(row.label)}</span>${row.submenu ? '<span class="ctx-arrow">›</span>' : ''}</div>`)).join('');
   const at = items.findIndex((row) => row.highlighted && row.submenu);
   const top = (/** @type {number} */ index) => 5 + items.slice(0, index).reduce((sum, row) => sum + (row.label === undefined ? 11 : 22), 0);
   return `<div class="ctx" style="left:${x}px;top:${y}px">${list(items)}</div>`
@@ -61,13 +62,13 @@ export function contextMenuHtml({ x, y, items, submenu }) {
     + `<style>
       .ctx { position: absolute; z-index: 10; width: 240px; box-sizing: border-box; padding: 5px; border-radius: 10px; background: rgba(246,246,246,.96);
         box-shadow: 0 0 0 .5px rgba(0,0,0,.22), 0 10px 30px rgba(0,0,0,.22); font: 13px/22px system-ui; color: #1d1d1f; }
-      .ctx .row { display: flex; align-items: center; height: 22px; padding: 0 8px 0 4px; border-radius: 5px; white-space: nowrap; }
-      .ctx .row.on { background: #0a82ff; color: #fff; }
-      .ctx .row.off { color: #b0b0b0; }
-      .ctx .ic { width: 22px; flex: none; display: flex; }
-      .ctx .label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-      .ctx .arrow { flex: none; font-size: 15px; opacity: .7; }
-      .ctx .sep { height: 1px; margin: 5px 8px; background: rgba(0,0,0,.11); }
+      .ctx-row { display: flex; align-items: center; height: 22px; padding: 0 8px 0 4px; border-radius: 5px; white-space: nowrap; }
+      .ctx-row.on { background: #0a82ff; color: #fff; }
+      .ctx-row.off { color: #b0b0b0; }
+      .ctx-ic { width: 22px; flex: none; display: flex; }
+      .ctx-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+      .ctx-arrow { flex: none; font-size: 15px; opacity: .7; }
+      .ctx-sep { height: 1px; margin: 5px 8px; background: rgba(0,0,0,.11); }
     </style>`;
 }
 

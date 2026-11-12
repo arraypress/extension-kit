@@ -268,7 +268,8 @@ describe('store shots', () => {
     assert.match(html, /<span>Better Fonts<\/span>/);
     assert.match(html, new RegExp(`<img src="panel.png" width="${PANEL_W}"`));
     assert.equal((html.match(/class="ctx"/g) ?? []).length, 2);
-    assert.match(html, /class="row on"><span class="ic"><img src="ext.png"[^>]*><\/span><span class="label">Better Copy<\/span><span class="arrow">/);
+    assert.equal((html.match(/class="ctx-sep"/g) ?? []).length, 1, 'its own separator class: the tab strip styles .sep');
+    assert.match(html, /class="ctx-row on"><span class="ctx-ic"><img src="ext.png"[^>]*><\/span><span class="ctx-label">Better Copy<\/span><span class="ctx-arrow">/);
     assert.doesNotMatch(html, /class="popup"/);
   });
 
