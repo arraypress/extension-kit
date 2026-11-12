@@ -6,6 +6,12 @@
  * The module, and anything it keeps, stays loaded in that world between calls,
  * so a content script can hold a session (a picker, an inspector) across them.
  *
+ * List the modules with `"use_dynamic_url": true`: a page can then no longer
+ * load them by the extension's address (its `import()` and `fetch()` are
+ * refused), so it can't tell the extension is installed, while this import
+ * from the isolated world works as before (checked in Chromium 156,
+ * tests/chrome-chromium.test.js).
+ *
  * @module scripting/call
  */
 

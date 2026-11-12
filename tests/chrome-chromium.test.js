@@ -4,13 +4,14 @@
  * `chrome.scripting`. A site typed as a match pattern still registers (and the pattern it used
  * to make is one Chrome refuses, with the whole registration); a page module listed with
  * `use_dynamic_url` is still imported by `callInPage`, and the page can no longer load it to
- * tell the extension is there.
+ * tell the extension is there; and a worker without a Prompt API of its own gets its answers
+ * from the offscreen document, over Chrome's real messages.
  *
  * @module tests/chrome-chromium
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -26,7 +27,7 @@ const MANIFEST = {
   manifest_version: 3,
   name: 'Kit in Chrome',
   version: '1.0',
-  permissions: ['scripting'],
+  permissions: ['scripting', 'offscreen'],
   host_permissions: ['<all_urls>'],
   background: { service_worker: 'worker.js', type: 'module' },
   web_accessible_resources: [
@@ -57,6 +58,16 @@ describe('the kit in a real extension', () => {
     await writeFile(path.join(dir, 'content/script.js'), '');
     await writeFile(path.join(dir, 'manifest.json'), JSON.stringify(MANIFEST));
     await writeFile(path.join(dir, 'worker.js'), "import * as kit from './kit/index.js';\nself.kit = kit;\n");
+    await mkdir(path.join(dir, 'offscreen'));
+    // The offscreen document, with the kit's fake Prompt API where the real one has no model to run (a test profile).
+    await cp(path.join(ROOT, 'src/testing/fake-model.js'), path.join(dir, 'kit/testing/fake-model.js'));
+    await writeFile(path.join(dir, 'offscreen/offscreen.html'), '<!doctype html><script type="module" src="offscreen.js"></script>');
+    await writeFile(path.join(dir, 'offscreen/offscreen.js'), `import { serveModelOffscreen, watchSchemeOffscreen } from '../kit/index.js';
+import { fakeLanguageModel } from '../kit/testing/fake-model.js';
+const fake = fakeLanguageModel({ answer: (prompt) => 'Offscreen heard: ' + prompt });
+watchSchemeOffscreen(chrome.runtime);
+serveModelOffscreen(chrome.runtime, { model: () => (location.hash === '#real' ? globalThis.LanguageModel : fake) });
+`);
     site = await serve(() => '<!doctype html><title>A site</title><p>Hello</p>');
     extension = await launchExtension(chromium, dir);
   });
@@ -104,5 +115,31 @@ describe('the kit in a real extension', () => {
     assert.equal(await fromPage('content/plain.js'), 'loaded'); // A page can tell the extension is installed.
     assert.equal(await fromPage('content/hidden.js'), 'refused');
     assert.equal(await page.evaluate((url) => fetch(url).then(() => 'loaded', () => 'refused'), extension.url('content/hidden.js')), 'refused');
+  });
+
+  it('a worker with no Prompt API of its own is answered by the offscreen document', async () => {
+    const outcome = await extension.worker.evaluate(async () => {
+      const { createHostedModelSession, watchFromOffscreen } = /** @type {WorkerGlobals} */ (/** @type {unknown} */ (self)).kit;
+      const ENGLISH = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] };
+      const session = createHostedModelSession({
+        name: 'words', options: ENGLISH, initialPrompts: [{ role: 'system', content: 'Be brief.' }],
+        runtime: chrome.runtime, open: () => watchFromOffscreen(chrome), model: () => undefined,
+      });
+      const stop = new AbortController();
+      stop.abort();
+      return {
+        inWorker: typeof (/** @type {{LanguageModel?: unknown}} */ (/** @type {unknown} */ (self)).LanguageModel),
+        availability: await session.availability(),
+        answer: await session.ask('Topic: football', { timeoutMs: 5000 }),
+        aborted: await session.ask('Never sent', { timeoutMs: 5000, signal: stop.signal }),
+        documents: (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length,
+      };
+    });
+    assert.equal(outcome.availability, 'available');
+    assert.deepEqual(outcome.answer, { text: 'Offscreen heard: Topic: football', reason: 'answered' });
+    assert.deepEqual(outcome.aborted, { text: null, reason: 'aborted' });
+    assert.equal(outcome.documents, 1);
+    // What this Chromium does, for the record (Chrome's documentation says workers have none): see ai/host.js.
+    assert.ok(['function', 'undefined'].includes(outcome.inWorker));
   });
 });

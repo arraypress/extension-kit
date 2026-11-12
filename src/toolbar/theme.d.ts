@@ -132,9 +132,12 @@ export type OffscreenApi = {
  *
  * @param {OffscreenApi} api - `chrome.offscreen` and `chrome.runtime`.
  * @param {string} [url] - The document, from the extension's root. Default {@link OFFSCREEN_PATH}.
+ * @param {string} [justification] - What the document is for, when it does more than watch the
+ *   scheme (it answers for Chrome's on-device model too, `serveModelOffscreen`): Chrome keeps it
+ *   with the document, so it has to be the whole truth.
  * @returns {Promise<boolean>} Whether it opened one (false: already open).
  */
-export declare function watchFromOffscreen({ offscreen, runtime }: OffscreenApi, url?: string): Promise<boolean>;
+export declare function watchFromOffscreen({ offscreen, runtime }: OffscreenApi, url?: string, justification?: string): Promise<boolean>;
 export type ToolbarWorkerApi = {
     /**
      * `chrome.storage`.
@@ -179,9 +182,14 @@ export type ToolbarWorkerApi = {
  * worker wakes.
  *
  * @param {ToolbarWorkerApi} api - `chrome`, or a fake.
+ * @param {{url?: string, justification?: string}} [document] - The offscreen document and what
+ *   it's for, when it isn't the kit's defaults ({@link watchFromOffscreen}).
  * @returns {ToolbarTheme} The theme, for tests.
  * @example
  * // background.js
  * startToolbarTheme(chrome);
  */
-export declare function startToolbarTheme(api: ToolbarWorkerApi): ToolbarTheme;
+export declare function startToolbarTheme(api: ToolbarWorkerApi, { url, justification }?: {
+    url?: string;
+    justification?: string;
+}): ToolbarTheme;

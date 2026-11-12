@@ -9,7 +9,8 @@
  *   only downloads from a user gesture) and which reports progress;
  * - one base session, with the instructions and examples, is made once and
  *   kept; each question goes to a `clone()` of it, so answers don't leak into
- *   each other;
+ *   each other; a base session Chrome has let go since (it can't be cloned)
+ *   is made again;
  * - each answer has a time limit: an `AbortSignal` stops the answer once
  *   it's late, and the caller gets a reason instead of a hang;
  * - the first session after Chrome starts can take ~18 s while the model
@@ -265,7 +266,14 @@ export function createModelSession({ model, options, initialPrompts = [] }) {
    * @returns {Promise<string>} The answer.
    */
   async function ask(api, prompt, signal, responseConstraint) {
-    const session = await (await baseSession(api)).clone({ signal });
+    const made = baseSession(api);
+    const kept = await made;
+    const session = await kept.clone({ signal }).catch(async (error) => {
+      if (signal.aborted) throw error;
+      // Chrome let the base session go (the model was updated, or its process ended): a new one, once.
+      if (base === made) base = null;
+      return (await baseSession(api)).clone({ signal });
+    });
     try {
       return await session.prompt(prompt, { signal, ...(responseConstraint && { responseConstraint }) });
     } finally {

@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { RUNTIME_ENTRIES } from '../src/build/index.js';
 import {
-  MODEL_MESSAGES, chromeLanguageModel, createModelRow, createModelSession, describeModel, downloadModel, modelAvailability,
+  MODEL_HOST, MODEL_MESSAGES, chromeLanguageModel, createHostedModelSession, createModelRow, createModelSession, describeModel, downloadModel,
+  modelAvailability, serveModelOffscreen,
 } from '../src/index.js';
 import { fakeLanguageModel } from '../src/testing/index.js';
 
@@ -221,5 +222,136 @@ describe('createModelRow (jsdom)', () => {
     assert.equal(missing.parts.status.textContent, 'optionsModelMissing');
     assert.equal(missing.parts.help.textContent, 'optionsModelMissingHelp');
     assert.equal(missing.parts.download.hidden, true);
+  });
+});
+
+describe('a base session Chrome let go', () => {
+  it('is made again, once, and the question answered', async () => {
+    const model = fakeLanguageModel();
+    let gone = false;
+    /** The Prompt API, its first base session failing to clone once `gone`. */
+    const flaky = {
+      ...model,
+      create: async (/** @type {import('../src/index.js').LanguageModelOptions} */ options = {}) => {
+        const session = await model.create(options);
+        const first = model.log.created.length === 1;
+        return { ...session, clone: async (/** @type {{signal?: AbortSignal}} */ o = {}) => { if (first && gone) throw new DOMException('The session has been destroyed.', 'InvalidStateError'); return session.clone(o); } };
+      },
+    };
+    const sessions = createModelSession({ model: () => flaky, options: ENGLISH });
+    assert.equal((await sessions.ask('one', { timeoutMs: 500 })).reason, 'answered');
+    gone = true;
+    assert.deepEqual(await sessions.ask('two', { timeoutMs: 500 }), { text: 'Fake answer', reason: 'answered' });
+    assert.equal(model.log.created.length, 2);
+    assert.equal((await sessions.ask('three', { timeoutMs: 500 })).reason, 'answered');
+    assert.equal(model.log.created.length, 2); // The new one is kept.
+  });
+});
+
+describe('a model session for a service worker', () => {
+  /**
+   * A worker and an offscreen document joined by `chrome.runtime` messages, as Chrome carries
+   * them: JSON only, to every listener, the first answer back.
+   *
+   * @param {ReturnType<typeof fakeLanguageModel> | undefined} documentModel - The document's Prompt API.
+   */
+  const joined = (documentModel) => {
+    /** @type {((message: unknown, sender: {id?: string, tab?: unknown}, respond: (answer: unknown) => void) => boolean)[]} */
+    const listeners = [];
+    const state = { opened: 0, sender: /** @type {{id?: string, tab?: unknown}} */ ({ id: 'kit' }), sent: /** @type {any[]} */ ([]) };
+    const runtime = {
+      id: 'kit',
+      onMessage: { addListener: (/** @type {typeof listeners[number]} */ listener) => { listeners.push(listener); } },
+      sendMessage: (/** @type {unknown} */ message) => new Promise((resolve, reject) => {
+        const carried = JSON.parse(JSON.stringify(message));
+        state.sent.push(carried);
+        const heard = listeners.filter((listener) => listener(carried, state.sender, (answer) => resolve(answer === undefined ? undefined : JSON.parse(JSON.stringify(answer)))));
+        if (!heard.length) reject(new Error('Could not establish connection. Receiving end does not exist.'));
+      }),
+    };
+    const open = async () => {
+      if (state.opened++ === 0) serveModelOffscreen(runtime, { model: () => documentModel });
+    };
+    return { runtime, open, state };
+  };
+  const INSTRUCTIONS = [{ role: /** @type {const} */ ('system'), content: 'Be brief.' }];
+
+  it('asks the worker’s own Prompt API when it has one, and never opens the document', async () => {
+    const own = fakeLanguageModel({ answer: () => 'From the worker' });
+    const { runtime, open, state } = joined(fakeLanguageModel());
+    const session = createHostedModelSession({ name: 'words', options: ENGLISH, runtime, open, model: () => own });
+    assert.equal(await session.availability(), 'available');
+    assert.deepEqual(await session.ask('Hi', { timeoutMs: 500 }), { text: 'From the worker', reason: 'answered' });
+    assert.equal(state.opened, 0);
+    assert.deepEqual(state.sent, []);
+  });
+
+  it('without one, the offscreen document answers: its state, an answer with the session’s options and instructions, the schema', async () => {
+    const inDocument = fakeLanguageModel({ answer: (prompt) => `Document: ${prompt}` });
+    const { runtime, open, state } = joined(inDocument);
+    const session = createHostedModelSession({ name: 'words', options: ENGLISH, initialPrompts: INSTRUCTIONS, runtime, open, model: () => undefined });
+    assert.equal(await session.availability(), 'available');
+    const schema = { type: 'object', properties: { words: { type: 'array' } } };
+    assert.deepEqual(await session.ask('Hi', { timeoutMs: 500, responseConstraint: schema }), { text: 'Document: Hi', reason: 'answered' });
+    assert.deepEqual(inDocument.log.created, [{ ...ENGLISH, initialPrompts: INSTRUCTIONS }]);
+    assert.deepEqual(inDocument.log.promptOptions[0].responseConstraint, schema);
+    await session.ask('Again', { timeoutMs: 500 });
+    assert.equal(inDocument.log.created.length, 1); // One base session, kept in the document.
+    assert.equal(state.sent.every((message) => message.type === MODEL_HOST), true);
+  });
+
+  it('the document’s reasons come back: not on this computer, late, failed', async () => {
+    for (const [setup, reason] of /** @type {const} */ ([
+      [{ availability: 'downloadable' }, 'unavailable'], [{ answerMs: 200 }, 'late'], [{ failPrompt: true }, 'failed'],
+    ])) {
+      const { runtime, open } = joined(fakeLanguageModel(setup));
+      const session = createHostedModelSession({ name: 'words', options: ENGLISH, runtime, open, model: () => undefined });
+      assert.deepEqual(await session.ask('Hi', { timeoutMs: 40 }), { text: null, reason });
+    }
+  });
+
+  it('the caller’s abort stops the answer in the document', async () => {
+    const inDocument = fakeLanguageModel({ answerMs: 2000 });
+    const { runtime, open } = joined(inDocument);
+    const session = createHostedModelSession({ name: 'words', options: ENGLISH, runtime, open, model: () => undefined });
+    const stop = new AbortController();
+    setTimeout(() => stop.abort(), 20);
+    assert.deepEqual(await session.ask('Hi', { timeoutMs: 5000, signal: stop.signal }), { text: null, reason: 'aborted' });
+    assert.equal(inDocument.log.aborted, 1);
+    stop.abort();
+    assert.deepEqual(await session.ask('Hi', { timeoutMs: 5000, signal: stop.signal }), { text: null, reason: 'aborted' });
+  });
+
+  it('no document to ask (it couldn’t open, or has no Prompt API either): missing, unavailable, nothing thrown', async () => {
+    const closed = { sendMessage: async () => { throw new Error('Could not establish connection.'); } };
+    const refused = createHostedModelSession({ name: 'words', options: ENGLISH, runtime: closed, open: async () => { throw new Error('No offscreen permission'); }, model: () => undefined });
+    assert.equal(await refused.availability(), 'missing');
+    assert.deepEqual(await refused.ask('Hi', { timeoutMs: 50 }), { text: null, reason: 'unavailable' });
+    refused.release();
+
+    const { runtime, open } = joined(undefined);
+    const neither = createHostedModelSession({ name: 'words', options: ENGLISH, runtime, open, model: () => undefined });
+    assert.equal(await neither.availability(), 'missing');
+    assert.deepEqual(await neither.ask('Hi', { timeoutMs: 50 }), { text: null, reason: 'unavailable' });
+  });
+
+  it('the document ignores a web page’s content script and another extension; each name has its own session', async () => {
+    const inDocument = fakeLanguageModel();
+    const { runtime, open, state } = joined(inDocument);
+    const words = createHostedModelSession({ name: 'words', options: ENGLISH, runtime, open, model: () => undefined });
+    const checks = createHostedModelSession({ name: 'checks', options: ENGLISH, initialPrompts: INSTRUCTIONS, runtime, open, model: () => undefined });
+    await words.ask('a', { timeoutMs: 500 });
+    await checks.ask('b', { timeoutMs: 500 });
+    assert.equal(inDocument.log.created.length, 2);
+    words.release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await words.ask('c', { timeoutMs: 500 });
+    assert.equal(inDocument.log.created.length, 3); // Released: made again.
+
+    state.sender = { id: 'kit', tab: { id: 4 } };
+    assert.deepEqual(await words.ask('from a page', { timeoutMs: 50 }), { text: null, reason: 'unavailable' });
+    state.sender = { id: 'someone-else' };
+    assert.equal(await words.availability(), 'missing');
+    assert.equal(inDocument.log.prompts.includes('from a page'), false);
   });
 });

@@ -9,7 +9,8 @@
  *   only downloads from a user gesture) and which reports progress;
  * - one base session, with the instructions and examples, is made once and
  *   kept; each question goes to a `clone()` of it, so answers don't leak into
- *   each other;
+ *   each other; a base session Chrome has let go since (it can't be cloned)
+ *   is made again;
  * - each answer has a time limit: an `AbortSignal` stops the answer once
  *   it's late, and the caller gets a reason instead of a hang;
  * - the first session after Chrome starts can take ~18 s while the model

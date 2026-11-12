@@ -265,6 +265,16 @@ const highlight = createHighlighter(document, { root: () => root });
 highlight.show(elements, { reveal: true });
 ```
 
+List the page modules with `use_dynamic_url`, so a web page can't load them to find out the
+extension is installed (a static `chrome-extension://<id>/content/main.js` answers any page that
+asks; with `use_dynamic_url` the page's `import()` and `fetch()` are refused, and `callInPage`'s
+own import from the isolated world still works: checked in Chromium 156,
+`tests/chrome-chromium.test.js`):
+
+```json
+"web_accessible_resources": [{ "resources": ["content/*.js", "vendor/extension-kit/*"], "matches": ["<all_urls>"], "use_dynamic_url": true }]
+```
+
 `callInPage(scripting, target, module, name, args, {immediately})` resolves to each frame's
 `{frameId, result}` (frames Chrome couldn't run in left out) and rejects when it can run in none;
 `immediately` (default true) doesn't wait for the page to be idle. `openSidePanel` sets the tab's
@@ -345,6 +355,34 @@ goes to a `clone()` of it, let go after; the answer's `AbortSignal` fires at the
 first session after Chrome starts can take ~18 s while the model loads: a question with a shorter
 limit comes back `'late'`, and the session goes on loading for the next one. Nothing loads it ahead
 of time (that would load the model on every start). `release()` lets the base session go.
+
+A base session Chrome has let go since (the model was updated, its process ended) is made again
+when its `clone()` fails.
+
+**In a service worker.** Chrome's documentation says the Prompt API isn't in workers; Chrome 157
+and Chromium 156 do have `LanguageModel` in an extension's service worker (checked in both, with
+an unpacked extension: `'function'` in the worker, an extension page and an offscreen document).
+Since neither is promised, a worker uses `createHostedModelSession`: the same `ModelSession`,
+asking the worker's own `LanguageModel` when there is one and otherwise the extension's offscreen
+document, over `chrome.runtime` messages.
+
+```js
+// background.js
+const words = createHostedModelSession({
+  name: 'words', options: ENGLISH, initialPrompts: [{ role: 'system', content: 'You list words.' }],
+  runtime: chrome.runtime,
+  open: () => watchFromOffscreen(chrome, undefined, 'Reads light or dark mode for the toolbar icon, and runs Chrome’s on-device model.'),
+});
+
+// offscreen/offscreen.js: the one offscreen document an extension gets does both jobs.
+watchSchemeOffscreen(chrome.runtime);
+serveModelOffscreen(chrome.runtime);
+```
+
+The document is told each session's options and instructions with the request, keeps one base
+session per `name`, keeps the time limit, and stops an answer when the caller's signal aborts. It
+ignores requests from content scripts and other extensions. The schema for an answer crosses as
+JSON (an object, not a RegExp).
 
 `modelAvailability(api, options)` never throws (`'missing'` without a Prompt API).
 `downloadModel(api, options, {onProgress})` is the only `create()` that may download: call it

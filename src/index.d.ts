@@ -16,6 +16,7 @@
  */
 export { githubAboutLinks, isPlaceholder } from './about/links.js';
 export { MODEL_MESSAGES, chromeLanguageModel, createModelSession, describeModel, downloadModel, modelAvailability, } from './ai/model.js';
+export { HOST_GRACE_MS, MODEL_HOST, createHostedModelSession, serveModelOffscreen } from './ai/host.js';
 export { setShortcuts } from './commands/shortcuts.js';
 export { BLOCK_CHARS, SLICE_MS, blocksOf, eachInSlices, inSlices } from './content/slices.js';
 export { MAX_ELEMENTS, otherSiteFrames, renderedElements, shadowRootOf } from './content/elements.js';
