@@ -8,6 +8,15 @@
  * `chrome.storage.local` instead. Local also holds any write sync refused
  * (too many writes a minute, or an item over its size limit), kept under
  * `unsyncedKey`, read as if synced, and retried, so a change is never lost.
+ * Beside it (`<unsyncedKey>Was`) is what sync held for each when it was
+ * refused: once sync holds something else (the setting was changed since on
+ * another computer), the held change is the older one and is dropped, not
+ * read over the newer one or sent up over it.
+ *
+ * Holding a change is a read-modify-write of one local item, so it runs
+ * under a Web Lock the extension's pages and worker share: two refused
+ * writes at once keep both changes, and a retry can't put an older value
+ * back over a newer one.
  *
  * Each extension supplies its schema: the defaults and one normaliser that
  * coerces anything read from storage or a form into valid settings.
@@ -73,6 +82,11 @@ export type SettingsStore<S extends Record<string, unknown>> = {
      */
     retryUnsynced: (storage: SyncedStorage) => Promise<boolean>;
     /**
+     *   Whether trying again could help: something held is still the newest and small enough for sync
+     *   (an item over sync's size limit stays on this computer however often it's tried).
+     */
+    retryable: (storage: SyncedStorage) => Promise<boolean>;
+    /**
      *   Save the settings `changes` names, normalised.
      */
     save: (storage: SyncedStorage, changes: Partial<S>) => Promise<{
@@ -116,6 +130,9 @@ export type SettingsStore<S extends Record<string, unknown>> = {
  *   everything reached sync.
  * @property {(storage: SyncedStorage) => Promise<boolean>} retryUnsynced
  *   Try again to put earlier refusals into sync.
+ * @property {(storage: SyncedStorage) => Promise<boolean>} retryable
+ *   Whether trying again could help: something held is still the newest and small enough for sync
+ *   (an item over sync's size limit stays on this computer however often it's tried).
  * @property {(storage: SyncedStorage, changes: Partial<S>) => Promise<{settings: S, synced: boolean}>} save
  *   Save the settings `changes` names, normalised.
  * @property {(changes: Record<string, StorageChange>, area: string) => (keyof S & string)[]} changed

@@ -8,6 +8,15 @@
  * `chrome.storage.local` instead. Local also holds any write sync refused
  * (too many writes a minute, or an item over its size limit), kept under
  * `unsyncedKey`, read as if synced, and retried, so a change is never lost.
+ * Beside it (`<unsyncedKey>Was`) is what sync held for each when it was
+ * refused: once sync holds something else (the setting was changed since on
+ * another computer), the held change is the older one and is dropped, not
+ * read over the newer one or sent up over it.
+ *
+ * Holding a change is a read-modify-write of one local item, so it runs
+ * under a Web Lock the extension's pages and worker share: two refused
+ * writes at once keep both changes, and a retry can't put an older value
+ * back over a newer one.
  *
  * Each extension supplies its schema: the defaults and one normaliser that
  * coerces anything read from storage or a form into valid settings.
@@ -15,7 +24,7 @@
  * @module settings/store
  */
 
-import { MAX_SYNC_ITEM_BYTES, isEmpty, pick, syncItemBytes } from './storage.js';
+import { MAX_SYNC_ITEM_BYTES, exclusive, isEmpty, pick, sameValue, syncItemBytes } from './storage.js';
 
 /** @import { StorageChange, SyncedStorage } from './storage.js' */
 
@@ -51,6 +60,9 @@ import { MAX_SYNC_ITEM_BYTES, isEmpty, pick, syncItemBytes } from './storage.js'
  *   everything reached sync.
  * @property {(storage: SyncedStorage) => Promise<boolean>} retryUnsynced
  *   Try again to put earlier refusals into sync.
+ * @property {(storage: SyncedStorage) => Promise<boolean>} retryable
+ *   Whether trying again could help: something held is still the newest and small enough for sync
+ *   (an item over sync's size limit stays on this computer however often it's tried).
  * @property {(storage: SyncedStorage, changes: Partial<S>) => Promise<{settings: S, synced: boolean}>} save
  *   Save the settings `changes` names, normalised.
  * @property {(changes: Record<string, StorageChange>, area: string) => (keyof S & string)[]} changed
@@ -78,9 +90,36 @@ export function createSettingsStore({ defaults, normalize: normalizeRaw, localKe
   /** @param {Record<string, unknown> | null} [raw] @returns {S} */
   const normalize = (raw) => normalizeRaw(raw ?? {});
 
+  /** The local item holding what sync held for each refused setting: `{key: [value]}`, `[]` for nothing. */
+  const wasKey = `${unsyncedKey}Was`;
+
+  /**
+   * What an area holds for a key, in a form that tells nothing from `null`.
+   *
+   * @param {Record<string, unknown>} items - What a `get` gave.
+   * @param {string} key - The key.
+   * @returns {unknown[]} `[value]`, or `[]` when it holds nothing.
+   */
+  const seen = (items, key) => (key in items ? [items[key]] : []);
+
+  /**
+   * The held changes that are still the newest: sync holds what it did when each was refused.
+   * One held before `wasKey` existed has nothing to compare, and counts as newest.
+   *
+   * @param {Record<string, unknown>} held - The held changes.
+   * @param {Record<string, unknown[]>} was - What sync held when each was refused.
+   * @param {Record<string, unknown>} synced - What sync holds now.
+   * @returns {Record<string, unknown>} The ones to keep.
+   */
+  const newest = (held, was, synced) => Object.fromEntries(Object.entries(pick(held, syncedKeys))
+    .filter(([key]) => !(key in was) || sameValue(was[key], seen(synced, key))));
+
   /**
    * Start one sync write of `values` at once; resolves to what sync refused.
-   * An item too big for sync isn't even tried.
+   * An item too big for sync isn't even tried. When Chrome refuses several
+   * together for anything but its write rate, each is tried on its own, so
+   * one item Chrome won't take (the whole of sync is full, or it weighs more
+   * there than here) doesn't keep the others on this computer.
    *
    * @param {SyncedStorage} storage
    * @param {Record<string, unknown>} values
@@ -91,10 +130,13 @@ export function createSettingsStore({ defaults, normalize: normalizeRaw, localKe
     const fits = Object.fromEntries(entries.filter(([key, value]) => syncItemBytes(key, value) <= MAX_SYNC_ITEM_BYTES));
     const refused = Object.fromEntries(entries.filter(([key]) => !(key in fits)));
     if (isEmpty(fits)) return Promise.resolve(refused);
-    return storage.sync.set(fits).then(() => refused, (/** @type {unknown} */ error) => {
-      console.warn('Settings: Chrome Sync refused the change; keeping it on this computer and trying again later.',
-        /** @type {Error | undefined} */ (error)?.message ?? error);
-      return { ...refused, ...fits };
+    return storage.sync.set(fits).then(() => refused, async (/** @type {unknown} */ error) => {
+      const message = String(/** @type {Error | undefined} */ (error)?.message ?? error);
+      console.warn('Settings: Chrome Sync refused the change; keeping it on this computer and trying again later.', message);
+      const keys = Object.keys(fits);
+      if (keys.length === 1 || /MAX_WRITE_OPERATIONS/.test(message)) return { ...refused, ...fits };
+      const alone = await Promise.all(keys.map((key) => storage.sync.set({ [key]: fits[key] }).then(() => [], () => [key])));
+      return { ...refused, ...pick(fits, alone.flat()) };
     });
   }
 
@@ -102,30 +144,54 @@ export function createSettingsStore({ defaults, normalize: normalizeRaw, localKe
   async function load(storage) {
     const [synced, local] = await Promise.all([
       storage.sync.get([...syncedKeys]),
-      storage.local.get([...localKeys, unsyncedKey]),
+      storage.local.get([...localKeys, unsyncedKey, wasKey]),
     ]);
-    const { [unsyncedKey]: unsynced = {}, ...here } = local;
-    return normalize({ ...synced, ...pick(unsynced, syncedKeys), ...here });
+    const { [unsyncedKey]: unsynced = {}, [wasKey]: was = {}, ...here } = local;
+    return normalize({ ...synced, ...newest(unsynced, was, synced), ...here });
   }
 
   /**
    * One sync write for all of `values` (sync allows 120 a minute), then any
-   * that sync refused before. What sync refuses is kept in local, where
-   * `load` still reads it, and goes up with the next write or
-   * `retryUnsynced`.
+   * that sync refused before and that are still the newest. What sync refuses
+   * is kept in local, where `load` still reads it, and goes up with the next
+   * write or `retryUnsynced`.
    *
    * @type {SettingsStore<S>['writeSynced']}
    */
-  async function writeSynced(storage, values) {
+  function writeSynced(storage, values) {
     // Sent before anything is awaited, so a page that's closing still gets it out.
     const sending = send(storage, values);
-    const { [unsyncedKey]: held } = await storage.local.get([unsyncedKey]);
-    let refused = await sending;
-    const older = Object.fromEntries(Object.entries(pick(held ?? {}, syncedKeys)).filter(([key]) => !(key in values)));
-    if (!isEmpty(older)) refused = { ...(await send(storage, older)), ...refused };
-    if (!isEmpty(refused)) await storage.local.set({ [unsyncedKey]: refused });
-    else if (held) await storage.local.remove(unsyncedKey);
-    return isEmpty(refused);
+    return exclusive(`settings:${unsyncedKey}`, async (waited) => {
+      let refused = await sending;
+      const sent = Object.keys(values).filter((key) => !(key in refused));
+      if (waited && sent.length) {
+        // The work waited for may have been a retry that sent an older value after this one: put this one back.
+        const now = await storage.sync.get(sent);
+        const undone = pick(values, sent.filter((key) => !sameValue(seen(now, key), [values[key]])));
+        if (!isEmpty(undone)) refused = { ...refused, ...(await send(storage, undone)) };
+      }
+      const { [unsyncedKey]: held = {}, [wasKey]: was = {} } = await storage.local.get([unsyncedKey, wasKey]);
+      const heldKeys = Object.keys(pick(held, syncedKeys)).filter((key) => !(key in values));
+      const synced = await storage.sync.get([...heldKeys, ...Object.keys(refused)]);
+      const older = pick(newest(held, was, synced), heldKeys);
+      const stillOlder = isEmpty(older) ? {} : await send(storage, older);
+      const keep = { ...stillOlder, ...refused };
+      const keepWas = Object.fromEntries(Object.keys(keep).map((key) => [key, key in refused || !(key in was) ? seen(synced, key) : was[key]]));
+      if (isEmpty(keep)) {
+        if (!isEmpty(held) || !isEmpty(was)) await storage.local.remove([unsyncedKey, wasKey]);
+      } else if (!sameValue(keep, held) || !sameValue(keepWas, was)) {
+        await storage.local.set({ [unsyncedKey]: keep, [wasKey]: keepWas });
+      }
+      return isEmpty(keep);
+    });
+  }
+
+  /** @type {SettingsStore<S>['retryable']} */
+  async function retryable(storage) {
+    const { [unsyncedKey]: held = {}, [wasKey]: was = {} } = await storage.local.get([unsyncedKey, wasKey]);
+    const keys = Object.keys(pick(held, syncedKeys));
+    if (!keys.length) return false;
+    return Object.entries(newest(held, was, await storage.sync.get(keys))).some(([key, value]) => syncItemBytes(key, value) <= MAX_SYNC_ITEM_BYTES);
   }
 
   /**
@@ -166,6 +232,7 @@ export function createSettingsStore({ defaults, normalize: normalizeRaw, localKe
     normalize,
     load,
     writeSynced,
+    retryable,
     retryUnsynced: (/** @type {SyncedStorage} */ storage) => writeSynced(storage, {}),
     save,
     changed,

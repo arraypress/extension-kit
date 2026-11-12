@@ -56,6 +56,7 @@ export function createSettingsSaver(store, storage, { delay = 1000, retryAfter =
   let retryTimer;
   /** @type {Promise<unknown>} */
   let writing = Promise.resolve();
+  let stopped = false;
 
   /**
    * Track a write so `flush()` can be awaited; a failure is logged, never thrown.
@@ -68,10 +69,18 @@ export function createSettingsSaver(store, storage, { delay = 1000, retryAfter =
     return writing;
   };
 
+  /** Try again later, if anything held could reach sync then. */
+  async function retryLater() {
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
+    const worthIt = await store.retryable(storage);
+    if (stopped || !worthIt) return;
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(retry, retryAfter);
+  }
+
   function retry() {
-    track(store.retryUnsynced(storage).then((synced) => {
-      if (!synced) retryTimer = setTimeout(retry, retryAfter);
-    }));
+    track(store.retryUnsynced(storage).then((synced) => (synced ? undefined : retryLater())));
   }
 
   /** Writes start at once, not after earlier ones finish: Chrome applies them in order. */
@@ -80,10 +89,10 @@ export function createSettingsSaver(store, storage, { delay = 1000, retryAfter =
     const changes = pending;
     pending = {};
     if (!Object.keys(changes).length) return writing;
-    return track(store.save(storage, changes).then(({ settings, synced }) => {
-      clearTimeout(retryTimer);
-      if (!synced) retryTimer = setTimeout(retry, retryAfter);
+    return track(store.save(storage, changes).then(async ({ settings, synced }) => {
       onSaved(settings);
+      if (synced) clearTimeout(retryTimer);
+      else await retryLater();
     }));
   }
 
@@ -102,6 +111,7 @@ export function createSettingsSaver(store, storage, { delay = 1000, retryAfter =
       });
     },
     stop() {
+      stopped = true;
       clearTimeout(timer);
       clearTimeout(retryTimer);
     },

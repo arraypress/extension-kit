@@ -116,10 +116,12 @@ saver.follow((settings) => show(settings), chrome.storage.onChanged);
 
 | Store member | What it does |
 |---|---|
-| `load(storage)` | Every setting: sync, then held refusals, then local, normalised. |
+| `load(storage)` | Every setting: sync, then held refusals (the ones still newer than what sync holds), then local, normalised. |
 | `save(storage, changes)` | Writes only the settings named, so another computer's change to a different one survives. Resolves to `{settings, synced}`. |
-| `writeSynced(storage, values)` | One sync write; what sync refuses (rate limit, an item over 8,192 bytes) is kept in local under `unsyncedKey` and retried with the next write. |
+| `writeSynced(storage, values)` | One sync write; what sync refuses (rate limit, an item over 8,192 bytes) is kept in local under `unsyncedKey` and retried with the next write. Items refused together are tried one at a time, and a held change is dropped once another computer has changed that setting since. Holding runs under a Web Lock, so two writers at once lose nothing. |
 | `retryUnsynced(storage)` | Try the held refusals again. |
+| `retryable(storage)` | Whether trying again could help (something held is still the newest and fits one sync item). |
+| `syncItemBytes(key, value)` (an export) | What Chrome Sync counts for one item: the key plus the value as Chrome's JSON writer spells it (`<` is six bytes). |
 | `changed(changes, area)` | The settings a `chrome.storage.onChanged` event touches. |
 | `normalize(raw)`, `defaults`, `localKeys`, `syncedKeys`, `unsyncedKey` | The schema. |
 

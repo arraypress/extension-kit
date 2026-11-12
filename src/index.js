@@ -38,7 +38,7 @@ export { callInPage, importAndCall } from './scripting/call.js';
 export { contentScriptSync } from './scripting/registration.js';
 export { callInTab, isBrowserPage } from './scripting/tab.js';
 export { createSettingsSaver } from './settings/saver.js';
-export { MAX_SYNC_ITEM_BYTES } from './settings/storage.js';
+export { MAX_SYNC_ITEM_BYTES, syncItemBytes } from './settings/storage.js';
 export { createSettingsStore } from './settings/store.js';
 export {
   MAX_HOST_LENGTH, hostPatterns, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite, withSiteReplaced, withoutSite,

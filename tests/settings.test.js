@@ -1,6 +1,7 @@
 import { afterEach, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSettingsSaver, createSettingsStore } from '../src/index.js';
+import { MAX_SYNC_ITEM_BYTES, createSettingsSaver, createSettingsStore, syncItemBytes } from '../src/index.js';
+import { exclusive, sameValue } from '../src/settings/storage.js';
 import { SYNC_QUOTA_BYTES, fakeChromeStorage } from '../src/testing/index.js';
 
 /** @import { FakeChromeStorage } from '../src/testing/fake-storage.js' */
@@ -31,6 +32,27 @@ const exhaust = async (storage) => {
   for (let i = 0; i < 120; i++) await storage.sync.set({ filler: i });
 };
 const quiet = () => mock.method(console, 'warn', () => {});
+/**
+ * The storage with every call a task later, as Chrome's are (they cross to the browser), so
+ * calls from two places interleave as they do there. `refuse` says which sync writes Chrome turns away.
+ *
+ * @param {FakeChromeStorage} storage
+ * @param {(items: Record<string, unknown>) => boolean} [refuse]
+ * @returns {import('../src/settings/storage.js').SyncedStorage}
+ */
+const acrossProcesses = (storage, refuse = () => false) => {
+  /** @param {FakeChromeStorage['sync']} area @param {boolean} synced */
+  const later = (area, synced) => ({
+    get: async (/** @type {string | string[] | null} */ keys = null) => { await wait(0); return area.get(keys); },
+    set: async (/** @type {Record<string, unknown>} */ items) => {
+      await wait(0);
+      if (synced && refuse(items)) throw new Error('QUOTA_BYTES_PER_ITEM quota exceeded');
+      return area.set(items);
+    },
+    remove: async (/** @type {string | string[]} */ keys) => { await wait(0); return area.remove(keys); },
+  });
+  return { sync: later(storage.sync, true), local: later(storage.local, false) };
+};
 afterEach(() => mock.restoreAll());
 
 describe('settings store', () => {
@@ -122,6 +144,134 @@ describe('settings store', () => {
   });
 });
 
+describe('what sync counts for an item', () => {
+  it('counts as Chrome’s JSON writer spells it: “<” and the line separators six bytes each, the rest UTF-8', () => {
+    assert.equal(syncItemBytes('k', 'ab'), 5); // k"ab"
+    assert.equal(syncItemBytes('k', 'a<b'), 11); // k"a<b"
+    assert.equal(syncItemBytes('k', '  '), 15);
+    assert.equal(syncItemBytes('é', 'é'), 6); // two bytes each, and the quotes
+    assert.equal(syncItemBytes('k', { a: ['<'] }), 1 + '{"a":["<"]}'.length + 5);
+  });
+
+  it('an item of “<” that JSON.stringify calls small is known too big, and kept here untried', async () => {
+    const warn = quiet();
+    const storage = fakeChromeStorage();
+    const theme = '<b>'.repeat(2000); // 6,000 characters; 16,000 bytes in sync.
+    assert.ok(syncItemBytes('theme', theme) > MAX_SYNC_ITEM_BYTES);
+    const wide = createSettingsStore({ defaults: { theme: '', days: 7 }, normalize: (raw) => ({ theme: String(raw.theme ?? ''), days: Number(raw.days ?? 7) }) });
+    assert.equal((await wide.save(storage, { theme, days: 3 })).synced, false);
+    assert.deepEqual(storage.sync.data, { days: 3 });
+    assert.equal(warn.mock.callCount(), 0);
+  });
+
+  it('sameValue reads objects alike whatever their keys’ order (Chrome sorts them)', () => {
+    assert.equal(sameValue({ a: 1, b: [{ d: 1, c: 2 }] }, { b: [{ c: 2, d: 1 }], a: 1 }), true);
+    assert.equal(sameValue([1, 2], [2, 1]), false);
+    assert.equal(sameValue([], [null]), false);
+  });
+});
+
+describe('held changes, with two writers at once', () => {
+  it('two writes refused at once are both kept', async () => {
+    quiet();
+    const fake = fakeChromeStorage();
+    const storage = acrossProcesses(fake, () => true);
+    await Promise.all([store.writeSynced(storage, { theme: 'dark' }), store.writeSynced(storage, { days: 30 })]);
+    assert.deepEqual(fake.local.data[UNSYNCED], { theme: 'dark', days: 30 });
+    assert.deepEqual(await store.load(storage), { ...DEFAULTS, theme: 'dark', days: 30 });
+  });
+
+  it('a retry of an older held value can’t land over a newer save made meanwhile', async () => {
+    const fake = fakeChromeStorage({ local: { [UNSYNCED]: { days: 1 } } });
+    const storage = acrossProcesses(fake);
+    await Promise.all([store.retryUnsynced(storage), store.save(storage, { days: 2 })]);
+    assert.equal(fake.sync.data.days, 2);
+    assert.equal(UNSYNCED in fake.local.data, false);
+  });
+
+  it('one item Chrome refuses doesn’t keep the ones written with it out of sync', async () => {
+    quiet();
+    const fake = fakeChromeStorage();
+    const storage = acrossProcesses(fake, (items) => 'theme' in items);
+    assert.equal((await store.save(storage, { theme: 'dark', days: 30 })).synced, false);
+    assert.deepEqual(fake.sync.data, { days: 30 });
+    assert.deepEqual(fake.local.data[UNSYNCED], { theme: 'dark' });
+  });
+
+  it('refused for the write rate: nothing is tried one by one (each would be refused too)', async () => {
+    quiet();
+    const time = clock();
+    const storage = fakeChromeStorage({ now: time.now });
+    await exhaust(storage);
+    const set = mock.method(storage.sync, 'set');
+    await store.save(storage, { theme: 'dark', days: 30 });
+    assert.equal(set.mock.callCount(), 1);
+  });
+
+  it('exclusive() runs work one at a time and says who waited, with Web Locks or without', async () => {
+    for (const withLocks of [true, false]) {
+      const real = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+      if (!withLocks) Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
+      try {
+        /** @type {string[]} */
+        const order = [];
+        /** @param {string} name */
+        const work = (name) => async (/** @type {boolean} */ waited) => {
+          order.push(`${name} in${waited ? ' (waited)' : ''}`);
+          await wait(5);
+          order.push(`${name} out`);
+          return name;
+        };
+        assert.deepEqual(await Promise.all([exclusive('test-lock', work('a')), exclusive('test-lock', work('b'))]), ['a', 'b']);
+        assert.deepEqual(order, ['a in', 'a out', 'b in (waited)', 'b out']);
+        await assert.rejects(exclusive('test-lock', async () => { throw new Error('no'); }), /no/);
+        assert.equal(await exclusive('test-lock', async (/** @type {boolean} */ waited) => waited), false);
+      } finally {
+        if (real) Object.defineProperty(globalThis, 'navigator', real);
+      }
+    }
+  });
+});
+
+describe('a held change and a newer one from another computer', () => {
+  it('the newer one is read, and the held one is dropped, not sent up over it', async () => {
+    quiet();
+    const time = clock();
+    const storage = fakeChromeStorage({ now: time.now, sync: { days: 5 } });
+    await exhaust(storage);
+    await store.save(storage, { days: 1, theme: 'dark' }); // Refused: held here.
+    assert.equal((await store.load(storage)).days, 1);
+
+    storage.sync.data.days = 2; // The other computer's change arrives through sync.
+    assert.deepEqual(await store.load(storage), { ...DEFAULTS, days: 2, theme: 'dark' });
+    assert.equal(await store.retryable(storage), true); // The theme can still go up.
+
+    time.pass(61_000);
+    assert.equal(await store.retryUnsynced(storage), true);
+    assert.equal(storage.sync.data.days, 2);
+    assert.equal(storage.sync.data.theme, 'dark');
+    assert.deepEqual(Object.keys(storage.local.data), []);
+  });
+
+  it('a setting sync never held is the newest until sync holds one', async () => {
+    quiet();
+    const time = clock();
+    const storage = fakeChromeStorage({ now: time.now });
+    await exhaust(storage);
+    await store.save(storage, { days: 1 });
+    assert.equal((await store.load(storage)).days, 1);
+    storage.sync.data.days = 9;
+    assert.equal((await store.load(storage)).days, 9);
+  });
+
+  it('a change held by a version before this one (nothing to compare) is still read and retried', async () => {
+    const storage = fakeChromeStorage({ local: { [UNSYNCED]: { days: 3 } }, sync: { days: 8 } });
+    assert.equal((await store.load(storage)).days, 3);
+    assert.equal(await store.retryUnsynced(storage), true);
+    assert.equal(storage.sync.data.days, 3);
+  });
+});
+
 describe('fakeChromeStorage’s sync quotas', () => {
   it('refuses a write that takes sync past 102,400 bytes in all, as Chrome does, and keeps what it had', async () => {
     const storage = fakeChromeStorage();
@@ -202,6 +352,20 @@ describe('settings saver', () => {
       await wait(50);
       assert.equal(storage.sync.data.days, 14);
       assert.equal(UNSYNCED in storage.local.data, false);
+    } finally {
+      saver.stop();
+    }
+  });
+  it('nothing is retried while all that’s held is too big for sync', async () => {
+    const storage = fakeChromeStorage();
+    const retries = mock.fn(store.retryUnsynced);
+    const saver = createSettingsSaver({ ...store, retryUnsynced: retries }, storage, { delay: 5, retryAfter: 10 });
+    try {
+      saver.save({ sites: Array.from({ length: 500 }, (_, i) => `site-number-${i}.example.com`) });
+      await saver.flush();
+      await wait(60);
+      assert.equal(retries.mock.callCount(), 0);
+      assert.equal((await store.load(storage)).sites.length, 500);
     } finally {
       saver.stop();
     }

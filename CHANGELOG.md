@@ -5,6 +5,23 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] — unreleased
+
+Fixes from a review of the whole kit, and what the extensions' own fixes needed shared.
+
+### Added
+
+- **`syncItemBytes(key, value)`** is exported: what Chrome Sync counts for one item, for anything that packs data into sync items itself (Tabby's shards) and for the fake storage.
+- **`store.retryable(storage)`**: whether trying again could put anything held into sync (something held is still the newest and small enough).
+
+### Fixed
+
+- **`syncItemBytes` counts as Chrome does.** Chrome measures an item as its key plus the value written by its own JSON writer, which spells `<` as `\u003C` and U+2028 / U+2029 as `\u2028` / `\u2029` (six bytes each; `settings_storage_quota_enforcer.cc`, `base/json/string_escape.cc`). The kit counted `JSON.stringify`'s bytes, so text full of `<` passed as small and Chrome refused the whole write.
+- **One item Chrome refuses no longer keeps the settings written with it out of sync.** A refused batch (for anything but the write rate) is tried again one item at a time; before, every retry sent them together and failed together, for good.
+- **Two refused writes at once keep both changes**, and **a retry can't put an older value back over a newer save**: holding a change (a read-modify-write of one local item) runs under a Web Lock shared by the extension's pages and worker, and a write that had to wait checks that sync still holds what it sent.
+- **A held change no longer shadows, then overwrites, a newer one from another computer.** Beside the held changes the store keeps what sync held for each when it was refused (`<unsyncedKey>Was`); once sync holds something else, the held one is the older and is dropped. A change held by an earlier version (nothing to compare) is read and retried as before.
+- **The saver stops retrying when all that's held is too big for sync** (it retried every minute for as long as the page was open), and `stop()` holds even if a write is still finishing.
+
 ## [1.10.0] — unreleased
 
 ### Added
