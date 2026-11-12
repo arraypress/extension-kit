@@ -21,7 +21,8 @@ export const MAX_WAIT_MS = 600;
  *   none inside another.
  * @property {(node: Node) => void} [removed] A node that left (at once, so what the extension added for it
  *   can go with it).
- * @property {(node: Node) => boolean} [ignore] Whether a node added or removed is the extension's own.
+ * @property {(node: Node) => boolean} [ignore] Whether a node is the extension's own: one added or removed, and
+ *   anything that changes inside one (its text set again), is left out.
  * @property {number} [settleMs] How long a batch waits for more. Default {@link SETTLE_MS}.
  * @property {number} [maxWaitMs] The longest a batch waits. Default {@link MAX_WAIT_MS}.
  * @property {number} [regroupChildren] An element whose children changed is handed over again whole
@@ -56,14 +57,27 @@ export function watchChanges(root, {
     firstAt = 0;
     const nodes = [...pending].filter((node) => node.isConnected);
     pending = new Set();
-    // Each subtree once: a node inside another changed node goes with it.
-    const tops = nodes.filter((node) => !nodes.some((other) => other !== node && other.contains(node)));
+    // Each subtree once: a node inside another changed node goes with it. Found by walking up from
+    // each (its depth), not by asking every pair: a feed adding thousands at once would stall the page.
+    const batch = new Set(nodes);
+    const tops = nodes.filter((node) => {
+      for (let above = node.parentNode; above; above = above.parentNode) if (batch.has(above)) return false;
+      return true;
+    });
     if (tops.length) changed(tops);
+  };
+
+  /** Whether a node is the extension's own, or inside one that is. @param {Node | null} node */
+  const within = (node) => {
+    for (let at = node; at; at = at.parentNode) if (ignore(at)) return true;
+    return false;
   };
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       const target = mutation.target;
+      // What happens inside the extension's own elements (its note's text set again) isn't the page changing.
+      if (within(target)) continue;
       if (mutation.type === 'characterData') {
         pending.add(target);
         continue;

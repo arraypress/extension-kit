@@ -24,7 +24,8 @@ export type WatchHandlers = {
      */
     removed?: (node: Node) => void;
     /**
-     * Whether a node added or removed is the extension's own.
+     * Whether a node is the extension's own: one added or removed, and
+     * anything that changes inside one (its text set again), is left out.
      */
     ignore?: (node: Node) => boolean;
     /**
@@ -48,7 +49,8 @@ export type WatchHandlers = {
  *   none inside another.
  * @property {(node: Node) => void} [removed] A node that left (at once, so what the extension added for it
  *   can go with it).
- * @property {(node: Node) => boolean} [ignore] Whether a node added or removed is the extension's own.
+ * @property {(node: Node) => boolean} [ignore] Whether a node is the extension's own: one added or removed, and
+ *   anything that changes inside one (its text set again), is left out.
  * @property {number} [settleMs] How long a batch waits for more. Default {@link SETTLE_MS}.
  * @property {number} [maxWaitMs] The longest a batch waits. Default {@link MAX_WAIT_MS}.
  * @property {number} [regroupChildren] An element whose children changed is handed over again whole

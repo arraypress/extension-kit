@@ -93,6 +93,8 @@ export function createToast({ undoLabel = 'Undo', duration = TOAST_MS, undoDurat
       text.textContent = message;
       undoButton.hidden = !undo;
       undoLast = undo;
+      // Taken off the page since (a single-page site replaced its body): put back, or showing it would throw.
+      if (!toast.isConnected) (root?.isConnected === false ? doc.body : root ?? doc.body).append(toast);
       // Hidden and shown again, so it's the newest in the top layer (over a popover since).
       toast.togglePopover(false);
       toast.togglePopover(true);

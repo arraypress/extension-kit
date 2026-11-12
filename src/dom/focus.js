@@ -26,6 +26,21 @@ export function focusedElement(root = document) {
 }
 
 /**
+ * The focused element as seen from where `node` is: its shadow root's (a
+ * closed one too, which the document's `activeElement` stops at) or its
+ * document's, followed into open shadow roots below.
+ *
+ * @param {Node} node - A node in the page or in a shadow root.
+ * @returns {Element | null} The focused element, or null when nothing there has it.
+ * @example
+ * focusedIn(menu); // the menu's focused item, in a content script's closed shadow root too
+ */
+export function focusedIn(node) {
+  const root = /** @type {Document | ShadowRoot} */ (node.getRootNode());
+  return 'activeElement' in root ? focusedElement(root) : null;
+}
+
+/**
  * The document a component is made in: `root`'s, or the page's.
  *
  * @param {ParentNode} [root] - Where the component goes (an element or a shadow root), if given.

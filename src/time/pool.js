@@ -14,7 +14,8 @@
  *
  * @template T
  * @param {readonly T[]} items - The items.
- * @param {number} limit - At most this many at once.
+ * @param {number} limit - At most this many at once (at least one: a limit of 0 or less, or one
+ *   that isn't a number, runs them one at a time rather than not at all).
  * @param {(item: T, slot: number, index: number) => Promise<void>} work - Deals with one item;
  *   `slot` (0 to limit − 1) is the same for everything one slot does, for per-slot resources
  *   (a browser each).
@@ -24,7 +25,8 @@
  */
 export async function eachLimited(items, limit, work) {
   let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async (_, slot) => {
+  const slots = Math.max(1, Math.floor(limit) || 1);
+  await Promise.all(Array.from({ length: Math.min(slots, items.length) }, async (_, slot) => {
     while (next < items.length) {
       const index = next;
       next += 1;

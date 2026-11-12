@@ -82,6 +82,19 @@ describe('windowChromeSvg (Chromium)', () => {
   });
 });
 
+describe('windowChromeSvg with awkward input (Chromium)', () => {
+  it('stays well-formed with an “&” in an icon’s address or a favicon’s letter, and draws a window without tabs', async () => {
+    const page = await browser.newPage();
+    const parse = (/** @type {string} */ svg) => page.evaluate((text) => new DOMParser().parseFromString(text, 'image/svg+xml').querySelector('parsererror')?.textContent ?? null, svg);
+    assert.equal(await parse(windowChromeSvg({ tabs: [{ title: 'A', icon: 'https://example.com/icon?size=16&v="2"', active: true }], url: 'a.com', ext: ['https://example.com/e.png?a=1&b=2'] })), null);
+    assert.equal(await parse(windowChromeSvg({ tabs: [], url: 'a.com' })), null);
+    const letter = decodeURIComponent(letterIcon('&', '#000').slice('data:image/svg+xml,'.length));
+    assert.equal(await parse(letter), null);
+    assert.equal(await parse(decodeURIComponent(letterIcon('<', '#000').slice('data:image/svg+xml,'.length))), null);
+    await page.close();
+  });
+});
+
 describe('macWindowSvg (Chromium)', () => {
   for (const theme of /** @type {const} */ (['light', 'dark'])) {
     it(`a plain macOS title bar on a canvas, readable afterwards: the ${theme} theme, the traffic lights, the title after them`, async () => {

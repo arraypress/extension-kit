@@ -15,9 +15,35 @@ export const BLOCK_CHARS = 4000;
 /** How long one slice may run before the page gets the main thread back (ms), by default. Shorter slices cost more layout in all. */
 export const SLICE_MS = 40;
 
+/** Elements whose text is never the page's content: not cut into, nor handed over as blocks. */
+const NOT_CONTENT = new Set(['script', 'style', 'noscript', 'template']);
+
+/**
+ * The blocks of a part of the page, one at a time as they're asked for: the cutting (each
+ * level's text measured) is spread over the slices with the work, not done whole before the
+ * first. A level's children are listed when it's reached, so what the work adds beside a block
+ * isn't handed back to it.
+ *
+ * @param {Node} node - The part.
+ * @param {number} blockChars - The most text a block holds.
+ * @returns {Generator<Node, void, void>} The blocks, in page order.
+ */
+function* cut(node, blockChars) {
+  if (node.nodeType !== 1 || (node.textContent ?? '').length <= blockChars || !node.firstChild) {
+    yield node;
+    return;
+  }
+  for (const child of [...node.childNodes]) {
+    if (child.nodeType === 1 && NOT_CONTENT.has(/** @type {Element} */ (child).localName)) continue;
+    yield* cut(child, blockChars);
+  }
+}
+
 /**
  * The blocks of a part of the page: itself if small enough, else its
- * children's blocks (its own text nodes as blocks of their own).
+ * children's blocks (its own text nodes as blocks of their own). Scripts,
+ * styles and templates inside a part that's cut are left out: their text
+ * isn't the page's.
  *
  * @param {Node} root - The part.
  * @param {number} [blockChars] - The most text a block holds. Default {@link BLOCK_CHARS}.
@@ -26,18 +52,7 @@ export const SLICE_MS = 40;
  * blocksOf(document.body).length; // 1 for a short page, one per card for a long listing
  */
 export function blocksOf(root, blockChars = BLOCK_CHARS) {
-  /** @type {Node[]} */
-  const blocks = [];
-  /** @param {Node} node */
-  const cut = (node) => {
-    if (node.nodeType !== 1 || (node.textContent ?? '').length <= blockChars || !node.firstChild) {
-      blocks.push(node);
-      return;
-    }
-    for (const child of node.childNodes) cut(child);
-  };
-  cut(root);
-  return blocks;
+  return [...cut(root, blockChars)];
 }
 
 /**
@@ -95,5 +110,5 @@ export async function eachInSlices(items, work, { sliceMs = SLICE_MS, pause = ne
  */
 export function inSlices(root, work, { blockChars = BLOCK_CHARS, ...options } = {}) {
   // A block the work before took out of the page is skipped.
-  return eachInSlices(blocksOf(root, blockChars), (block) => { if (block.isConnected) work(block); }, options);
+  return eachInSlices(cut(root, blockChars), (block) => { if (block.isConnected) work(block); }, options);
 }

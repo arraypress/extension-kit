@@ -27,6 +27,7 @@
  * @module ui/site-list
  */
 
+import { focusedIn } from '../dom/focus.js';
 import { createMenu, moreActionsButton } from './menu.js';
 import { askText } from './text-dialog.js';
 import { MAX_HOST_LENGTH, siteLabel } from '../sites/sites.js';
@@ -177,9 +178,11 @@ export function createSiteList({
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const input = /** @type {HTMLInputElement} */ (form.querySelector('input'));
-    const site = parse(input.value);
-    if (!site) invalid?.(input.value);
-    else if (await add(site) !== false) input.value = '';
+    const typed = input.value;
+    const site = parse(typed);
+    if (!site) invalid?.(typed);
+    // Cleared only if it's still what was added: adding can wait on Chrome (a permission prompt), and the next site may be typed meanwhile.
+    else if (await add(site) !== false && input.value === typed) input.value = '';
   });
   addButton?.addEventListener('click', async () => {
     const site = await ask(w.addSite, w.add);
@@ -219,6 +222,11 @@ export function createSiteList({
 
   return {
     render(sites) {
+      // The focus stays in the list across a redraw: on the same row's button (the one after a removed
+      // row, the last after the last), or on the way to add when no row is left. Without this, the
+      // row's button a dialog or menu gave the focus back to is replaced and the focus falls to the page.
+      const focused = focusedIn(list);
+      const at = focused && list.contains(focused) ? [...list.children].findIndex((row) => row.contains(focused)) : -1;
       list.replaceChildren(...sites.map((site) => {
         const row = doc.createElement('li');
         row.className = 'row';
@@ -229,6 +237,7 @@ export function createSiteList({
         return row;
       }));
       if (empty) empty.hidden = sites.length > 0;
+      if (at >= 0) (list.children[Math.min(at, sites.length - 1)]?.querySelector('button') ?? addButton ?? form?.querySelector('input'))?.focus();
     },
   };
 }

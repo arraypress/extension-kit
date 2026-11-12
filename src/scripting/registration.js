@@ -24,7 +24,8 @@
  * @param {Scripting} scripting - `chrome.scripting` (or a fake in tests).
  * @param {string} id - The registered script's id.
  * @param {() => Promise<ContentScript | null>} want - What should be registered now (settings and
- *   grants read at the time).
+ *   grants read at the time). Give every property each time (`excludeMatches: []` for none): Chrome's
+ *   update keeps what a script leaves out, so a list that became empty and was dropped would stay.
  * @returns {() => Promise<void>} Makes the registration match; rejects if Chrome refuses.
  * @example
  * const sync = contentScriptSync(chrome.scripting, 'prices', async () => (await chrome.permissions.contains({ origins: ALL_SITES })

@@ -111,7 +111,7 @@ export type Tab = {
      */
     title: string;
     /**
-     * Its favicon's URL.
+     * Its favicon's URL (escaped into the markup: an `&` in it is fine).
      */
     icon: string;
     /**

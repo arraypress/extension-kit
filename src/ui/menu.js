@@ -14,7 +14,7 @@
  * @module ui/menu
  */
 
-import { focusedElement, rootDocument } from '../dom/focus.js';
+import { focusedElement, focusedIn, rootDocument } from '../dom/focus.js';
 
 /** The gap kept between a menu and the window's edges, in px. */
 export const MENU_EDGE = 8;
@@ -67,19 +67,21 @@ const BELOW_GAP = 4;
  *
  * @param {{width: number, height: number}} size - The menu's size.
  * @param {{width: number, height: number}} viewport - The window's (`innerWidth`, `innerHeight`).
- * @param {{anchor?: Box, x?: number, y?: number, placement?: 'over' | 'below'}} where - The anchor's
- *   box, or a point; `placement` says where it goes from an anchor (default `'over'`).
+ * @param {{anchor?: Box, x?: number, y?: number, placement?: 'over' | 'below', rtl?: boolean}} where - The
+ *   anchor's box, or a point; `placement` says where it goes from an anchor (default `'over'`); `rtl`
+ *   (a right-to-left page) lines its start up with the anchor's left edge and opens leftwards from a
+ *   point, as Chrome mirrors its own.
  * @returns {{left: number, top: number}} The menu's top-left, in px.
  * @example
  * menuPosition({width: 160, height: 120}, {width: 800, height: 600}, {anchor: button.getBoundingClientRect()});
  * // → {left: anchor.right - 160, top: anchor.top}
  */
-export function menuPosition(size, viewport, { anchor, x = 0, y = 0, placement = 'over' }) {
+export function menuPosition(size, viewport, { anchor, x = 0, y = 0, placement = 'over', rtl = false }) {
   const { width, height } = size;
   const left = (/** @type {number} */ start) => Math.max(MENU_EDGE, Math.min(start, viewport.width - width - MENU_EDGE));
   const room = (/** @type {number} */ top) => top + height <= viewport.height - MENU_EDGE;
-  if (!anchor) return { left: left(x), top: Math.max(MENU_EDGE, room(y) ? y : y - height) };
-  const start = left(anchor.right - width);
+  if (!anchor) return { left: left(rtl ? x - width : x), top: Math.max(MENU_EDGE, room(y) ? y : y - height) };
+  const start = left(rtl ? anchor.left : anchor.right - width);
   if (placement === 'below') {
     const below = anchor.bottom + BELOW_GAP;
     return { left: start, top: Math.max(MENU_EDGE, room(below) ? below : anchor.top - height - BELOW_GAP) };
@@ -118,6 +120,8 @@ export function isInside(box, x, y) {
  * @property {(entries: readonly MenuEntry[], where: MenuPlace) => void} open Fill it with `entries`
  *   and open it (closing it first if it's open).
  * @property {() => void} close Close it, if open, and return the focus.
+ * @property {() => void} destroy Take it off the page and stop listening to the window (a content
+ *   script's overlay being removed).
  */
 
 /**
@@ -168,20 +172,31 @@ export function createMenu({ id, placement = 'over', root, doc = rootDocument(ro
 
   menu.addEventListener('keydown', (event) => {
     const list = items();
-    const at = list.indexOf(/** @type {HTMLButtonElement} */ (focusedElement(doc)));
+    // Asked of the menu's own root: a closed shadow root's focused element can't be seen from the document.
+    const at = list.indexOf(/** @type {HTMLButtonElement} */ (focusedIn(menu)));
     /** @param {number} index */
     const go = (index) => {
-      event.preventDefault();
+      handled();
       list[(index + list.length) % list.length]?.focus();
+    };
+    /** The key is the menu's: the page under a content script's menu doesn't act on it too (its own shortcuts). */
+    const handled = () => {
+      event.preventDefault();
+      event.stopPropagation();
     };
     if (event.key === 'ArrowDown') go(at + 1);
     else if (event.key === 'ArrowUp') go(at < 0 ? -1 : at - 1);
     else if (event.key === 'Home') go(0);
     else if (event.key === 'End') go(-1);
     else if (event.key === 'Escape' || event.key === 'Tab') {
-      event.preventDefault();
+      handled();
       close();
     }
+  });
+  // Closed any other way (the browser's own close, another script): the button no longer says it's open.
+  menu.addEventListener('close', () => {
+    expanded?.setAttribute('aria-expanded', 'false');
+    expanded = null;
   });
   // Esc the browser handles itself (when the keydown above didn't see it).
   menu.addEventListener('cancel', (event) => {
@@ -219,7 +234,7 @@ export function createMenu({ id, placement = 'over', root, doc = rootDocument(ro
       if (label) menu.setAttribute('aria-label', label);
       else menu.removeAttribute('aria-label');
 
-      const active = focusedElement(doc);
+      const active = focusedIn(menu) ?? focusedElement(doc);
       returnFocus = focusTo ?? anchor ?? (active instanceof view.HTMLElement ? active : null);
       if (anchor?.hasAttribute('aria-haspopup')) {
         anchor.setAttribute('aria-expanded', 'true');
@@ -228,13 +243,18 @@ export function createMenu({ id, placement = 'over', root, doc = rootDocument(ro
       menu.showModal();
       const { width, height } = menu.getBoundingClientRect();
       const { left, top } = menuPosition({ width, height }, { width: view.innerWidth, height: view.innerHeight }, {
-        anchor: anchor?.getBoundingClientRect(), x, y, placement,
+        anchor: anchor?.getBoundingClientRect(), x, y, placement, rtl: view.getComputedStyle(menu).direction === 'rtl',
       });
       menu.style.left = `${left}px`;
       menu.style.top = `${top}px`;
       items()[0]?.focus();
     },
     close,
+    destroy() {
+      shut();
+      view.removeEventListener('blur', close);
+      menu.remove();
+    },
   };
 }
 

@@ -68,7 +68,7 @@ const icon = (name, size = 20) =>
  * @returns {string} A data: URL of the SVG.
  */
 export const letterIcon = (letter, bg, fg = '#fff') =>
-  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="${bg}"/><text x="8" y="12" font-family="-apple-system,Helvetica,Arial" font-size="11" font-weight="700" text-anchor="middle" fill="${fg}">${letter}</text></svg>`)}`;
+  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="${esc(bg)}"/><text x="8" y="12" font-family="-apple-system,Helvetica,Arial" font-size="11" font-weight="700" text-anchor="middle" fill="${esc(fg)}">${esc(letter)}</text></svg>`)}`;
 
 /**
  * A window's shadow: soft and dropped below it, as macOS draws one (px; `blur` as CSS's and a
@@ -140,7 +140,7 @@ const trafficLights = ({ left, top, size, gap }) =>
  *
  * @typedef {object} Tab
  * @property {string} title Its title.
- * @property {string} icon Its favicon's URL.
+ * @property {string} icon Its favicon's URL (escaped into the markup: an `&` in it is fine).
  * @property {boolean} [active] The selected tab.
  * @property {boolean} [audible] Playing sound.
  * @property {boolean} [muted] Muted.
@@ -160,7 +160,7 @@ function tabLayout(tabs, w) {
   const right = 60;
   const max = 240;
   const avail = w - left - right - 36;
-  const width = Math.min(max, Math.floor(avail / tabs.length));
+  const width = Math.min(max, Math.floor(avail / Math.max(1, tabs.length)));
   return tabs.map((_, i) => ({ x: left + i * width, width }));
 }
 
@@ -185,15 +185,16 @@ export function windowChrome({ tabs, url, urlHost, theme = 'light', w = WINDOW_W
     const alert = tab.muted ? icon('muted', 16) : tab.audible ? icon('sound', 16) : '';
     const showClose = tab.active || width >= 120;
     return `<div class="tab${tab.active ? ' active' : ''}" style="left:${x}px;width:${width}px">
-      <img class="fav" src="${tab.icon}" width="16" height="16" alt=""/>
+      <img class="fav" src="${esc(tab.icon)}" width="16" height="16" alt=""/>
       <span class="title">${esc(tab.title)}</span>
       ${alert ? `<span class="alert">${alert}</span>` : ''}
       ${showClose ? `<span class="x">${icon('close', 14)}</span>` : ''}
     </div>${sepAfter ? `<span class="sep" style="left:${x + width - 1}px"></span>` : ''}`;
   }).join('');
-  const last = layout[layout.length - 1];
-  const plusX = last.x + last.width + 4;
-  const extIcons = ext.map((src) => `<img src="${src}" width="16" height="16" alt="" style="margin:0 9px"/>`).join('');
+  // After the last tab, or where the first would be in a window drawn without any.
+  const last = layout.at(-1);
+  const plusX = last ? last.x + last.width + 4 : 84;
+  const extIcons = ext.map((src) => `<img src="${esc(src)}" width="16" height="16" alt="" style="margin:0 9px"/>`).join('');
   return `
   <div class="strip">
     ${trafficLights({ left: 16, top: 15, size: 12, gap: 8 })}

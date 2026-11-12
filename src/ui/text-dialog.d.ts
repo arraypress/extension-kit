@@ -4,8 +4,9 @@
  * folder's name (`askText`); several, as chrome://settings/searchEngines asks
  * for a site search (`askFields`). The action button stays disabled while a
  * field is blank or isn't valid, with the reason under that field. Enter
- * means the action button, Esc and Cancel cancel, and the focus goes back to
- * what opened it. The page needs no markup: the dialog (`#text-dialog`) is
+ * means the action button, Esc and Cancel cancel (as does the dialog being
+ * closed any other way), and the focus goes back to what opened it. A reason
+ * is announced as it appears, and its field marked invalid. The page needs no markup: the dialog (`#text-dialog`) is
  * made the first time, its fields each time it's asked.
  *
  * @module ui/text-dialog

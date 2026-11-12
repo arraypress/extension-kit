@@ -146,6 +146,38 @@ describe('createSiteList', () => {
     assert.deepEqual(rows(), []);
   });
 
+  it('the field is cleared only if it still holds what was added (adding can wait on a permission prompt)', async () => {
+    /** @type {(value: unknown) => void} */
+    let granted = () => {};
+    const { input, type } = card({ add: () => new Promise((resolve) => { granted = resolve; }) });
+    await type('example.com');
+    input.value = 'next.example.org'; // Typed while Chrome asks.
+    granted(true);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(input.value, 'next.example.org');
+  });
+
+  it('the focus stays in the list across a redraw: the row after a removed one, the last, then the way to add', async () => {
+    const { document, type, input } = card();
+    await type('a.com');
+    await type('b.com');
+    await type('c.com');
+    const buttons = () => /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('#sites li button')]);
+    const focusedLabel = () => document.activeElement?.getAttribute('aria-label');
+    buttons()[1].focus();
+    buttons()[1].click(); // Remove b.com: the focus was on a button that's gone.
+    assert.equal(focusedLabel(), 'Remove “c.com”');
+    buttons()[1].click();
+    assert.equal(focusedLabel(), 'Remove “a.com”');
+    buttons()[0].click();
+    assert.equal(document.activeElement, input);
+    // A redraw while the focus is elsewhere leaves it there.
+    await type('d.com');
+    input.focus();
+    await type('e.com');
+    assert.equal(document.activeElement, input);
+  });
+
   it('Remove takes its site out; labels and the button’s words can be the page’s own', async () => {
     const { document, type, rows } = card({
       parse: siteOrigin, words: { remove: 'Entfernen', removeLabel: (name) => `„${name}“ entfernen` },

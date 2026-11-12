@@ -99,8 +99,10 @@ export type Box = {
  *
  * @param {{width: number, height: number}} size - The menu's size.
  * @param {{width: number, height: number}} viewport - The window's (`innerWidth`, `innerHeight`).
- * @param {{anchor?: Box, x?: number, y?: number, placement?: 'over' | 'below'}} where - The anchor's
- *   box, or a point; `placement` says where it goes from an anchor (default `'over'`).
+ * @param {{anchor?: Box, x?: number, y?: number, placement?: 'over' | 'below', rtl?: boolean}} where - The
+ *   anchor's box, or a point; `placement` says where it goes from an anchor (default `'over'`); `rtl`
+ *   (a right-to-left page) lines its start up with the anchor's left edge and opens leftwards from a
+ *   point, as Chrome mirrors its own.
  * @returns {{left: number, top: number}} The menu's top-left, in px.
  * @example
  * menuPosition({width: 160, height: 120}, {width: 800, height: 600}, {anchor: button.getBoundingClientRect()});
@@ -112,11 +114,12 @@ export declare function menuPosition(size: {
 }, viewport: {
     width: number;
     height: number;
-}, { anchor, x, y, placement }: {
+}, { anchor, x, y, placement, rtl }: {
     anchor?: Box;
     x?: number;
     y?: number;
     placement?: 'over' | 'below';
+    rtl?: boolean;
 }): {
     left: number;
     top: number;
@@ -163,6 +166,11 @@ export type ActionMenu = {
      * Close it, if open, and return the focus.
      */
     close: () => void;
+    /**
+     * Take it off the page and stop listening to the window (a content
+     * script's overlay being removed).
+     */
+    destroy: () => void;
 };
 /**
  * What {@link createMenu} takes.
@@ -182,6 +190,8 @@ export type ActionMenu = {
  * @property {(entries: readonly MenuEntry[], where: MenuPlace) => void} open Fill it with `entries`
  *   and open it (closing it first if it's open).
  * @property {() => void} close Close it, if open, and return the focus.
+ * @property {() => void} destroy Take it off the page and stop listening to the window (a content
+ *   script's overlay being removed).
  */
 /**
  * Make a page's action menu: one `<dialog class="menu">` that any number of

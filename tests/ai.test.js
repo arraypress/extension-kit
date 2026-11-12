@@ -207,6 +207,22 @@ describe('createModelRow (jsdom)', () => {
     assert.equal(row.current(), 'available');
   });
 
+  it('after a download, a state that can’t be asked (the worker didn’t answer) is this page’s, not a row left downloading', async () => {
+    const { parts } = page();
+    const model = fakeLanguageModel({ availability: 'downloadable' });
+    let asked = 0;
+    const row = createModelRow(parts, {
+      options: ENGLISH, t, model: () => model,
+      state: async () => { if (asked++) throw new Error('Could not establish connection.'); return 'downloadable'; },
+    });
+    await row.refresh();
+    parts.download.click();
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+    assert.equal(parts.status.textContent, 'optionsModelReady');
+    assert.equal(parts.progress.hidden, true);
+    assert.equal(row.current(), 'available');
+  });
+
   it('says when a download failed, and offers it again; with no Prompt API, says so and offers nothing', async () => {
     const { parts } = page();
     const model = fakeLanguageModel({ availability: 'downloadable', failDownload: true });

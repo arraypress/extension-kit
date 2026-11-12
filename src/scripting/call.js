@@ -9,7 +9,7 @@
  * `"use_dynamic_url": true` on those resources would keep a page from loading
  * them to tell the extension is installed, and this import still works with
  * it, but only for a module with no static imports: Chrome refuses a
- * dynamic-URL module's `import … from './part.js'` (checked in Chromium 156,
+ * dynamic-URL module's own static import of a sibling module (checked in Chromium 156,
  * tests/chrome-chromium.test.js). So it suits a single-file (bundled) page
  * module, not one that imports its parts.
  *

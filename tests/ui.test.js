@@ -39,6 +39,12 @@ describe('menuPosition', () => {
     assert.deepEqual(menuPosition(size, viewport, { x: 790, y: 590 }), { left: 800 - 160 - MENU_EDGE, top: 590 - 120 });
   });
 
+  it('on a right-to-left page: its start at the button’s left edge, and leftwards from a point', () => {
+    assert.deepEqual(menuPosition(size, viewport, { anchor: button(500, 100), rtl: true }), { left: 500, top: 100 });
+    assert.deepEqual(menuPosition(size, viewport, { x: 400, y: 150, rtl: true }), { left: 240, top: 150 });
+    assert.deepEqual(menuPosition(size, viewport, { x: 50, y: 150, rtl: true }), { left: MENU_EDGE, top: 150 });
+  });
+
   it('isInside counts the edges as inside', () => {
     const box = { left: 10, top: 10, right: 20, bottom: 20 };
     assert.ok(isInside(box, 10, 20));

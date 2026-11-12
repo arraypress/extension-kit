@@ -308,6 +308,21 @@ describe('text dialog (Chromium)', () => {
     await page.close();
   });
 
+  it('a reason is announced and its field marked invalid while it shows; closed by anything else, the dialog is cancelled', async () => {
+    const page = await open();
+    await ask(page, true);
+    const field = page.getByRole('dialog', { name: 'Add site' }).getByRole('textbox', { name: 'Site' });
+    assert.equal(await page.locator('#text-dialog-error').getAttribute('aria-live'), 'polite');
+    assert.equal(await field.getAttribute('aria-invalid'), null);
+    await page.keyboard.type('news');
+    assert.equal(await field.getAttribute('aria-invalid'), 'true');
+    await page.keyboard.type('.example');
+    assert.equal(await field.getAttribute('aria-invalid'), null);
+    await page.evaluate(() => /** @type {HTMLDialogElement} */ (document.getElementById('text-dialog')).close());
+    assert.equal(await answer(page), null);
+    await page.close();
+  });
+
   it('Esc and Cancel cancel (null), the focus goes where returnTo says, and the next ask starts clean', async () => {
     const page = await open();
     await ask(page, true, true);
@@ -472,6 +487,54 @@ describe('in a shadow root (Chromium)', () => {
     await page.close();
   });
 
+  it('in a closed shadow root (a content script’s overlay) the arrow keys still move through the items, and the page hears none of them', async () => {
+    const page = await open();
+    await page.evaluate(async () => {
+      const { kit } = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+      const overlay = kit.pageOverlay(document, { name: 'closed-controls', css: await (await fetch('/src/styles/chrome-ui.css')).text() });
+      const menu = kit.createMenu({ root: overlay.root });
+      const more = kit.moreActionsButton('Table');
+      more.addEventListener('click', () => menu.open([{ label: 'One', run: () => {} }, { label: 'Two', run: () => {} }, { label: 'Three', run: () => {} }], { anchor: more }));
+      overlay.root.append(more);
+      /** @type {string[]} */
+      const heard = [];
+      document.addEventListener('keydown', (event) => heard.push(event.key));
+      Object.assign(window, { closedRoot: overlay.root, closedMenu: menu, more, heard });
+      more.click();
+    });
+    const item = () => page.evaluate(() => /** @type {any} */ (window).closedRoot.activeElement?.textContent);
+    assert.equal(await item(), 'One');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await item(), 'Two');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await item(), 'Three');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await item(), 'Two');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => /** @type {any} */ (window).closedRoot.activeElement === /** @type {any} */ (window).more), true, 'the focus is back on the button');
+    assert.deepEqual(await page.evaluate(() => /** @type {any} */ (window).heard), [], 'the page’s own shortcuts don’t act on the menu’s keys');
+    await page.close();
+  });
+
+  it('closed by something else, its button no longer says it’s open; destroy() takes it off the page and stops listening', async () => {
+    const page = await withShadowMenuOpen();
+    const more = page.locator('controls-host').getByRole('button', { name: 'More actions for “Table”' });
+    assert.equal(await more.getAttribute('aria-expanded'), 'true');
+    await page.evaluate(() => /** @type {any} */ (window).shadowMenu.element.close());
+    await until(async () => await more.getAttribute('aria-expanded') === 'false', 'the button to say it’s closed'); // The close event comes a task later.
+    const left = await page.evaluate(() => {
+      const { shadowMenu } = /** @type {any} */ (window);
+      let removed = 0;
+      const remove = window.removeEventListener;
+      window.removeEventListener = function counted(/** @type {any[]} */ ...args) { if (args[0] === 'blur') removed++; return remove.apply(this, /** @type {any} */ (args)); };
+      shadowMenu.destroy();
+      window.removeEventListener = remove;
+      return { menus: document.querySelector('controls-host')?.shadowRoot?.querySelectorAll('dialog.menu').length, removed };
+    });
+    assert.deepEqual(left, { menus: 0, removed: 1 });
+    await page.close();
+  });
+
   it('the toast shows in the top layer, over anything the page stacks, from a menu item', async () => {
     const page = await withShadowMenuOpen();
     await page.locator('controls-host').getByRole('menuitem', { name: 'Copy table' }).click();
@@ -534,6 +597,17 @@ describe('toast (Chromium)', () => {
     const box = await page.locator('#own').boundingBox();
     assert.ok(box);
     assert.deepEqual([Math.round(box.x), Math.round(600 - box.y - box.height)], [24, 24]);
+    await page.close();
+  });
+
+  it('taken off the page since (a site replaced its body), it’s put back and shown, not an error', async () => {
+    const page = await withToast();
+    await page.evaluate(() => {
+      document.getElementById('toast')?.remove();
+      /** @type {any} */ (window).toast.show('Still here');
+    });
+    assert.equal(await showing(page), true);
+    assert.equal(await page.locator('#toast-text').innerText(), 'Still here');
     await page.close();
   });
 
@@ -747,6 +821,19 @@ describe('pageOverlay in the top layer (Chromium)', () => {
     });
     assert.deepEqual(styles, ['fixed', '0px', '0px', 'rgba(0, 0, 0, 0)', 'none']);
     await top.close();
+  });
+
+  it('a page’s own ::backdrop rule doesn’t tint the window through the overlay’s popover', async () => {
+    const page = await open('/content');
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent = '::backdrop { background: rgb(255 0 0) }';
+      document.head.append(style);
+    });
+    await overlayWithCard(page, true);
+    assert.notDeepEqual(await pixel(page, 400, 300), RED);
+    assert.deepEqual(await pixel(page, 10, 10), RED); // The card itself still shows.
+    await page.close();
   });
 
   it('remove() takes it away and stops watching the page; raise() after that does nothing', async () => {

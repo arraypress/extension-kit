@@ -94,7 +94,11 @@ export function createModelRow({ status, help, download, progress }, { options, 
         progress.value = loaded;
         status.textContent = t(MODEL_MESSAGES.downloading, [String(Math.round(loaded * 100))]);
       },
-    }).then(async () => show(await state()), () => show('downloadable', t(MODEL_MESSAGES.downloadFailed)));
+    }).then(
+      // The state as the code that uses it sees it; if it can't be asked (the worker didn't answer), as this page does.
+      async (here) => show(await state().catch(() => here)),
+      () => show('downloadable', t(MODEL_MESSAGES.downloadFailed)),
+    );
   });
 
   return {

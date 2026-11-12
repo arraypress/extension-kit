@@ -31,7 +31,8 @@
  * paints in the order things entered it, so the overlay goes back on top (`raise`) whenever the
  * page opens a dialog or a popover or goes fullscreen after it. What a modal dialog makes inert
  * stays inert, the overlay with it: it shows over the dialog, but can't be clicked while the
- * dialog is open.
+ * dialog is open. The popover's own backdrop is taken away (first in the overlay's styles), so a
+ * page's `::backdrop` rule can't tint the window through it.
  *
  * @param {Document} doc - The page.
  * @param {{name: string, css: string, hostStyle?: Record<string, string>, topLayer?: boolean}} options -
@@ -54,7 +55,8 @@ export function pageOverlay(doc, { name, css, hostStyle = {}, topLayer = false }
   for (const [property, value] of Object.entries(hostStyle)) host.style.setProperty(property, value, 'important');
   const root = host.attachShadow({ mode: 'closed' });
   const style = doc.createElement('style');
-  style.textContent = css;
+  // A shown popover has a backdrop over the whole window, which a page's bare `::backdrop { … }` rule would tint.
+  style.textContent = topLayer ? `:host::backdrop { display: none !important; }\n${css}` : css;
   root.append(style);
   doc.documentElement.append(host);
   if (!topLayer || typeof host.showPopover !== 'function') return { host, root, remove: () => host.remove(), raise: () => {} };

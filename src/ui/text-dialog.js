@@ -4,8 +4,9 @@
  * folder's name (`askText`); several, as chrome://settings/searchEngines asks
  * for a site search (`askFields`). The action button stays disabled while a
  * field is blank or isn't valid, with the reason under that field. Enter
- * means the action button, Esc and Cancel cancel, and the focus goes back to
- * what opened it. The page needs no markup: the dialog (`#text-dialog`) is
+ * means the action button, Esc and Cancel cancel (as does the dialog being
+ * closed any other way), and the focus goes back to what opened it. A reason
+ * is announced as it appears, and its field marked invalid. The page needs no markup: the dialog (`#text-dialog`) is
  * made the first time, its fields each time it's asked.
  *
  * @module ui/text-dialog
@@ -178,7 +179,7 @@ function fieldFor(doc, request, only) {
   input.value = typeof request.value === 'string' ? request.value : '';
   if (request.placeholder) input.placeholder = request.placeholder;
   if (request.maxLength !== undefined) input.maxLength = request.maxLength;
-  const error = element(doc, 'span', { id: ids.error, class: 'hint error' });
+  const error = element(doc, 'span', { id: ids.error, class: 'hint error', 'aria-live': 'polite' });
   error.hidden = true;
   const hint = element(doc, 'span', { id: ids.hint, class: 'hint secondary' });
   hint.hidden = true;
@@ -226,6 +227,9 @@ export function askFields({
     const { reason } = waiting ? { reason: '' } : checkText(input.value, request.validate);
     error.textContent = reason;
     error.hidden = !reason;
+    // Said to a screen reader as it appears, and the field marked (the stylesheet turns its underline red).
+    if (reason) input.setAttribute('aria-invalid', 'true');
+    else input.removeAttribute('aria-invalid');
     hint.textContent = waiting ? request.waiting ?? '' : typeof request.hint === 'function' ? request.hint(input.value) : request.hint ?? '';
     hint.hidden = !hint.textContent;
   };
@@ -291,6 +295,9 @@ export function askFields({
       event.preventDefault();
       settle(null);
     }, { signal });
+    // Closed any other way (the browser's own close after a second Esc, another script): cancelled, not left unanswered.
+    // (The event comes a task after the closing: one from the ask before this, already answered, finds the dialog open again.)
+    parts.dialog.addEventListener('close', () => { if (!parts.dialog.open) settle(null); }, { signal });
 
     parts.dialog.showModal();
     // The first field still to fill in, or the first, its text selected to type over.

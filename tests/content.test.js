@@ -27,6 +27,34 @@ describe('blocksOf', () => {
   });
 });
 
+describe('blocksOf and inSlices on a whole page', () => {
+  it('scripts, styles and templates inside a part that’s cut aren’t blocks: their text isn’t the page’s', () => {
+    const long = 'x'.repeat(30);
+    const { document } = page(`<p>${long}</p><script>var a = "${long}";</script><style>.a { color: red; } /* ${long} */</style><template><p>${long}</p></template><noscript>${long}</noscript><p>${long}</p>`);
+    assert.deepEqual(blocksOf(document.body, 50).map((node) => node.nodeName), ['P', 'P']);
+  });
+
+  it('the page is cut as the work goes, not whole before the first slice; what the work adds beside a block isn’t handed back', async () => {
+    const long = 'x'.repeat(30);
+    const { document } = page(`<section><p>${long}</p><p>${long}</p></section><section><p>${long}</p><p>${long}</p></section>`);
+    const second = /** @type {Element} */ (document.querySelectorAll('section')[1]);
+    let measured = 0;
+    Object.defineProperty(second, 'textContent', { get() { measured++; return long + long; } });
+    /** @type {string[]} */
+    const worked = [];
+    let measuredAtFirst = -1;
+    await inSlices(document.body, (block) => {
+      if (measuredAtFirst < 0) measuredAtFirst = measured;
+      worked.push(block.nodeName);
+      const note = document.createElement('my-note');
+      note.textContent = long;
+      /** @type {Element} */ (block).after(note);
+    }, { blockChars: 50, pause: async () => {} });
+    assert.equal(measuredAtFirst, 0, 'the second section isn’t measured until the first is done');
+    assert.deepEqual(worked, ['P', 'P', 'P', 'P']);
+  });
+});
+
 describe('inSlices', () => {
   it('works every block still in the page, and pauses once a slice has run its time', async () => {
     const { document } = page(Array.from({ length: 6 }, (_, at) => `<p id="p${at}">${'y'.repeat(20)}</p>`).join(''));
@@ -104,6 +132,53 @@ describe('watchChanges', () => {
     document.body.append('after');
     await new Promise((resolve) => { setTimeout(resolve, 60); });
     assert.equal(batches.length, 1, 'stopped');
+  });
+
+  it('what changes inside the extension’s own element (its text set again, a child added) sets nothing off', async () => {
+    const { window } = new JSDOM('<body><p id="price">£5</p><my-note id="note"><b>was</b></my-note></body>');
+    const { document } = window;
+    globalThis.MutationObserver = window.MutationObserver;
+    /** @type {Node[][]} */
+    const batches = [];
+    const stop = watchChanges(document.body, {
+      changed: (nodes) => batches.push(nodes), settleMs: 5,
+      ignore: (node) => node.nodeType === 1 && /** @type {Element} */ (node).localName === 'my-note',
+    });
+    const note = /** @type {HTMLElement} */ (document.getElementById('note'));
+    /** @type {Text} */ (/** @type {Element} */ (note.firstElementChild).firstChild).data = 'now';
+    note.append(document.createElement('i'));
+    note.textContent = 'again';
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.deepEqual(batches, []);
+    /** @type {Text} */ (/** @type {HTMLElement} */ (document.getElementById('price')).firstChild).data = '£6';
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(batches.length, 1);
+    stop();
+  });
+
+  it('thousands of nodes added at once are sorted into subtrees without asking every pair', async () => {
+    const { window } = new JSDOM('<body><ul id="feed"></ul></body>');
+    const { document } = window;
+    globalThis.MutationObserver = window.MutationObserver;
+    /** @type {Node[]} */
+    let handed = [];
+    const stop = watchChanges(document.body, { changed: (nodes) => { handed = nodes; }, settleMs: 0 });
+    const feed = /** @type {HTMLElement} */ (document.getElementById('feed'));
+    let asked = 0;
+    const contains = window.Node.prototype.contains;
+    window.Node.prototype.contains = function counted(/** @type {Node | null} */ other) { asked++; return contains.call(this, other); };
+    for (let i = 0; i < 3000; i++) {
+      const item = document.createElement('li');
+      item.append(document.createElement('span'));
+      feed.append(item);
+      item.firstElementChild?.append('text'); // A change inside one already added: it goes with its item.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    window.Node.prototype.contains = contains;
+    assert.equal(handed.length, 3000);
+    assert.equal(handed.every((node) => node.nodeName === 'LI'), true);
+    assert.ok(asked < 3000, `contains() asked ${asked} times`);
+    stop();
   });
 
   it('an element with few children whose children changed is handed over whole; a page that keeps changing still gets a batch', async () => {

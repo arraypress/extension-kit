@@ -14,7 +14,9 @@ export declare const BLOCK_CHARS = 4000;
 export declare const SLICE_MS = 40;
 /**
  * The blocks of a part of the page: itself if small enough, else its
- * children's blocks (its own text nodes as blocks of their own).
+ * children's blocks (its own text nodes as blocks of their own). Scripts,
+ * styles and templates inside a part that's cut are left out: their text
+ * isn't the page's.
  *
  * @param {Node} root - The part.
  * @param {number} [blockChars] - The most text a block holds. Default {@link BLOCK_CHARS}.

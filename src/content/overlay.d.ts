@@ -47,7 +47,8 @@ export type PageOverlay = {
  * paints in the order things entered it, so the overlay goes back on top (`raise`) whenever the
  * page opens a dialog or a popover or goes fullscreen after it. What a modal dialog makes inert
  * stays inert, the overlay with it: it shows over the dialog, but can't be clicked while the
- * dialog is open.
+ * dialog is open. The popover's own backdrop is taken away (first in the overlay's styles), so a
+ * page's `::backdrop` rule can't tint the window through it.
  *
  * @param {Document} doc - The page.
  * @param {{name: string, css: string, hostStyle?: Record<string, string>, topLayer?: boolean}} options -
