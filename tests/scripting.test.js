@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { RUNTIME_ENTRIES } from '../src/build/index.js';
-import { contentScriptSync } from '../src/index.js';
+import { contentScriptSync, contextMenuBuilder } from '../src/index.js';
 
 /** @import { ContentScript } from '../src/index.js' */
 
@@ -88,5 +88,76 @@ describe('contentScriptSync', () => {
 
   it('is in the runtime half, vendored with it', () => {
     assert.ok(RUNTIME_ENTRIES.includes('scripting'));
+  });
+});
+
+/**
+ * A fake `chrome.contextMenus` as Chrome behaves: `removeAll` and `create` take a moment, and an id
+ * created twice leaves "Cannot create item with duplicate id" in `runtime.lastError`.
+ *
+ * @returns {{edges: import('../src/scripting/context-menus.js').MenuEdges, ids: string[], errors: string[]}}
+ */
+function fakeMenus() {
+  /** @type {string[]} */
+  const ids = [];
+  /** @type {string[]} */
+  const errors = [];
+  /** @type {{lastError?: {message?: string}}} */
+  const runtime = {};
+  const later = () => new Promise((resolve) => setTimeout(resolve, 2));
+  const contextMenus = /** @type {import('../src/scripting/context-menus.js').MenuEdges['contextMenus']} */ (/** @type {unknown} */ ({
+    removeAll: async () => { await later(); ids.length = 0; },
+    create: (/** @type {chrome.contextMenus.CreateProperties} */ item, /** @type {() => void} */ done) => {
+      later().then(() => {
+        const id = String(item.id);
+        if (ids.includes(id)) {
+          runtime.lastError = { message: `Cannot create item with duplicate id ${id}` };
+          errors.push(id);
+        } else ids.push(id);
+        done();
+        delete runtime.lastError;
+      });
+    },
+  }));
+  return { edges: { contextMenus, runtime }, ids, errors };
+}
+
+describe('contextMenuBuilder', () => {
+  const items = [{ id: 'parent', title: 'Parent' }, { id: 'a', parentId: 'parent', title: 'A' }, { id: 'b', parentId: 'parent', title: 'B' }];
+
+  it('builds the menu in order', async () => {
+    const { edges, ids } = fakeMenus();
+    await contextMenuBuilder(edges)(items);
+    assert.deepEqual(ids, ['parent', 'a', 'b']);
+  });
+
+  it('two builds at once (install and browser start in one run) never create an item twice', async () => {
+    const { edges, ids, errors } = fakeMenus();
+    const build = contextMenuBuilder(edges);
+    const logged = console.error;
+    console.error = () => {};
+    try {
+      await Promise.all([build(items), build(items)]);
+    } finally {
+      console.error = logged;
+    }
+    assert.deepEqual(errors, []);
+    assert.deepEqual(ids, ['parent', 'a', 'b']);
+  });
+
+  it('an item Chrome refuses is logged and the rest are still made', async () => {
+    const { edges, ids } = fakeMenus();
+    /** @type {unknown[][]} */
+    const said = [];
+    const logged = console.error;
+    console.error = (...args) => { said.push(args); };
+    try {
+      await contextMenuBuilder(edges)([{ id: 'a', title: 'A' }, { id: 'a', title: 'Again' }, { id: 'b', title: 'B' }]);
+    } finally {
+      console.error = logged;
+    }
+    assert.deepEqual(ids, ['a', 'b']);
+    assert.equal(said.length, 1);
+    assert.match(String(said[0][1]), /duplicate id a/);
   });
 });

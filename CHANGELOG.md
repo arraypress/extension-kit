@@ -12,6 +12,7 @@ Fixes from a review of the whole kit, and what the extensions' own fixes needed 
 ### Added
 
 - **`syncItemBytes(key, value)`** is exported: what Chrome Sync counts for one item, for anything that packs data into sync items itself (Tabby's shards) and for the fake storage.
+- **`contextMenuBuilder(chrome)`** (`scripting/context-menus.js`): the right-click menu built whole (`removeAll`, then each item in order, a refused one logged), one build after another. A worker that builds its menu on install and on browser start got both events in one run after a Chrome update, and the two builds' creates interleaved: “Cannot create item with duplicate id” on the Errors page. Replaces the same `removeAll`-and-create code in Better Copy, Better Tables and Clean Links.
 - **`store.retryable(storage)`**: whether trying again could put anything held into sync (something held is still the newest and small enough).
 
 ### Fixed

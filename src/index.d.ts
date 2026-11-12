@@ -32,6 +32,7 @@ export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
 export { openSidePanel, sidePanelPath } from './panel/side-panel.js';
 export { callInPage, importAndCall } from './scripting/call.js';
+export { contextMenuBuilder } from './scripting/context-menus.js';
 export { contentScriptSync } from './scripting/registration.js';
 export { callInTab, isBrowserPage } from './scripting/tab.js';
 export { createSettingsSaver } from './settings/saver.js';

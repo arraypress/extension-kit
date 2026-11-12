@@ -296,6 +296,16 @@ can call it from a menu click or a shortcut (Chrome lets the focused active tab 
 `noticeCard({icon, tone, title, text, buttons, actions})` is a side panel's notice (`.sp-notice`:
 frames from other sites to allow); `counted(count, one, many, {t, lang})` a count in words.
 
+## The right-click menu
+
+```js
+// Built on install and on browser start; after a Chrome update both come in one run, and two
+// builds side by side would create every item twice. Through the builder, one waits for the other.
+const buildMenu = contextMenuBuilder(chrome);
+chrome.runtime.onInstalled.addListener(() => buildMenu(menuItems(t)));
+chrome.runtime.onStartup.addListener(() => buildMenu(menuItems(t)));
+```
+
 ## A content script on every site
 
 ```js
