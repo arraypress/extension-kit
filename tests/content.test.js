@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { RUNTIME_ENTRIES } from '../src/build/index.js';
 import { BLOCK_CHARS, blocksOf, eachInSlices, inSlices, watchChanges } from '../src/index.js';
+import { until } from '../src/testing/e2e.js';
 
 /** @param {string} html */
 const page = (html) => new JSDOM(`<body>${html}</body>`).window;
@@ -173,7 +174,8 @@ describe('watchChanges', () => {
       feed.append(item);
       item.firstElementChild?.append('text'); // A change inside one already added: it goes with its item.
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Waited for, not timed: under a loaded machine the batch can take longer than any fixed wait.
+    await until(() => handed.length > 0, 'the batch to be handed over');
     window.Node.prototype.contains = contains;
     assert.equal(handed.length, 3000);
     assert.equal(handed.every((node) => node.nodeName === 'LI'), true);
