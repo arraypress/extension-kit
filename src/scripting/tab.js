@@ -2,8 +2,9 @@
  * Reading a tab: one of the extension's page modules called in every frame
  * Chrome lets it run in, the frames' answers top first; or why it can't be
  * read: a page Chrome keeps to itself (its own pages, the Web Store, other
- * extensions'), or no access (the tab went to another site since the click
- * that gave activeTab).
+ * extensions'), no access (the tab went to another site since the click
+ * that gave activeTab), the module failed in every frame, or no answer in
+ * time.
  *
  * @module scripting/tab
  */
@@ -33,8 +34,10 @@ export const isBrowserPage = (url) => BROWSER_PAGE.test(url);
  * What reading a tab gave.
  *
  * @template T
- * @typedef {{state: 'read', frames: FrameResult<T>[]} | {state: 'browser'} | {state: 'no-access'}} TabReading
+ * @typedef {{state: 'read', frames: FrameResult<T>[]} | {state: 'browser'} | {state: 'no-access'} | {state: 'failed', error: string} | {state: 'timeout'}} TabReading
  *   `frames`: each frame that answered (not null), the top one first, then in Chrome's frame order.
+ *   `failed`: no frame answered and the call threw in at least one (`error`: the first one's reason),
+ *   which Chrome itself reports as a bare null; `timeout`: `timeoutMs` passed first.
  */
 
 /**
@@ -54,13 +57,15 @@ export const isBrowserPage = (url) => BROWSER_PAGE.test(url);
  * @param {string} module - The module (in `web_accessible_resources`).
  * @param {string} name - The export.
  * @param {unknown[]} [args] - Its arguments.
+ * @param {{timeoutMs?: number}} [options] - `timeoutMs`: the longest to wait (Chrome answers once every
+ *   frame has, so one that never does would keep a panel waiting for ever); default none.
  * @returns {Promise<TabReading<T>>} The frames' answers, or why there are none.
  * @example
  * const reading = await callInTab(chrome, tabId, 'content/main.js', 'scan');
  * if (reading.state === 'read') show(reading.frames);
- * else showMessage(reading.state); // 'browser' or 'no-access'
+ * else showMessage(reading.state); // 'browser', 'no-access', 'failed' or 'timeout'
  */
-export async function callInTab(edges, tabId, module, name, args = []) {
+export async function callInTab(edges, tabId, module, name, args = [], { timeoutMs } = {}) {
   let url;
   try {
     url = (await edges.tabs.get(tabId)).url;
@@ -71,11 +76,14 @@ export async function callInTab(edges, tabId, module, name, args = []) {
   /** @type {FrameResult<T>[]} */
   let frames;
   try {
-    frames = await callInPage(edges.scripting, { tabId, allFrames: true }, module, name, args);
+    frames = await callInPage(edges.scripting, { tabId, allFrames: true }, module, name, args, { timeoutMs });
   } catch (error) {
+    if (/** @type {Error} */ (error)?.name === 'TimeoutError') return { state: 'timeout' };
     // Chrome's own page (said in its refusal), or no access: the tab went to another site since the click.
     return { state: BROWSER_REFUSAL.test(String(/** @type {Error} */ (error)?.message)) ? 'browser' : 'no-access' };
   }
   const read = frames.filter((frame) => frame.result !== null && frame.result !== undefined).sort((a, b) => a.frameId - b.frameId);
-  return read.length ? { state: 'read', frames: read } : { state: 'no-access' };
+  if (read.length) return { state: 'read', frames: read };
+  const failed = frames.toSorted((a, b) => a.frameId - b.frameId).find((frame) => frame.error !== undefined);
+  return failed ? { state: 'failed', error: /** @type {string} */ (failed.error) } : { state: 'no-access' };
 }

@@ -16,6 +16,8 @@
  * @module scripting/call
  */
 
+import { deadline } from '../time/time.js';
+
 /**
  * The parts of `chrome.scripting` a call uses.
  *
@@ -28,8 +30,12 @@
  * @template T
  * @typedef {object} FrameResult
  * @property {number} frameId The frame (0 is the top one).
- * @property {T} result The function's result, once its promise settled.
+ * @property {T} result The function's result, once its promise settled (null when it failed).
+ * @property {string} [error] Why it failed there: the module didn't load, or the function threw.
  */
+
+/** The key of what {@link importAndCall} answers with when the call failed: Chrome itself gives a bare null for a function that throws. */
+export const CALL_FAILED = 'extension-kit:call-failed';
 
 /**
  * The function `executeScript` runs in the page: alone, without closures.
@@ -37,9 +43,11 @@
  * @param {string} module - The module's path in the extension, `content/main.js`.
  * @param {string} name - The export to call.
  * @param {unknown[]} args - Its arguments.
- * @returns {Promise<unknown>} What it returns.
+ * @returns {Promise<unknown>} What it returns, or `{'extension-kit:call-failed': message}` when the
+ *   module didn't load or the function threw (`executeScript` would give null, and no reason).
  */
-export const importAndCall = (module, name, args) => import(chrome.runtime.getURL(module)).then((loaded) => loaded[name](...args));
+export const importAndCall = (module, name, args) => import(chrome.runtime.getURL(module)).then((loaded) => loaded[name](...args))
+  .catch((error) => ({ 'extension-kit:call-failed': String(error?.message ?? error) }));
 
 /**
  * Call `name` from the extension module `module` in the target's frames.
@@ -49,16 +57,25 @@ export const importAndCall = (module, name, args) => import(chrome.runtime.getUR
  * @param {chrome.scripting.InjectionTarget} target - The tab, and which frames (`allFrames`, `frameIds`).
  * @param {string} module - The module's path in the extension (listed in `web_accessible_resources`).
  * @param {string} name - The exported function.
- * @param {unknown[]} [args] - Its arguments (structured-cloneable).
- * @param {{immediately?: boolean}} [options] - `immediately` (default true): don't wait for the
- *   page to be idle, which a page still loading ads or a player may not be for a long time.
- * @returns {Promise<FrameResult<T>[]>} Each frame's result, frames Chrome couldn't run in left out;
- *   rejects when it can run in none (a page Chrome keeps to itself, no access).
+ * @param {unknown[]} [args] - Its arguments, and its result: JSON-serialisable (Chrome carries them
+ *   as JSON, so a Map, a Set or a Date doesn't survive).
+ * @param {{immediately?: boolean, timeoutMs?: number}} [options] - `immediately` (default true): don't
+ *   wait for the page to be idle, which a page still loading ads or a player may not be for a long
+ *   time. `timeoutMs`: the longest to wait for every frame (Chrome answers only once all have, so one
+ *   frame that never does keeps the rest waiting); default none.
+ * @returns {Promise<FrameResult<T>[]>} Each frame's result, frames Chrome couldn't run in left out; a
+ *   frame where the call failed has `result: null` and its `error`. Rejects when it can run in none
+ *   (a page Chrome keeps to itself, no access), and with a `TimeoutError` when `timeoutMs` passes.
  * @example
  * const [{ result }] = await callInPage(chrome.scripting, { tabId }, 'content/main.js', 'scan', [options]);
  * await callInPage(chrome.scripting, { tabId, allFrames: true }, 'content/main.js', 'highlight', [key]);
  */
-export async function callInPage(scripting, target, module, name, args = [], { immediately = true } = {}) {
-  const frames = await scripting.executeScript({ target, injectImmediately: immediately, func: importAndCall, args: [module, name, args] });
-  return frames.map((frame) => ({ frameId: frame.frameId, result: /** @type {T} */ (frame.result) }));
+export async function callInPage(scripting, target, module, name, args = [], { immediately = true, timeoutMs } = {}) {
+  const running = scripting.executeScript({ target, injectImmediately: immediately, func: importAndCall, args: [module, name, args] });
+  const frames = await (timeoutMs === undefined ? running
+    : deadline(running, timeoutMs, (_, reject) => reject(new DOMException(`${module} ${name}: no answer in ${timeoutMs} ms`, 'TimeoutError'))));
+  return frames.map(({ frameId, result }) => {
+    const failed = result && typeof result === 'object' ? /** @type {Record<string, unknown>} */ (result)[CALL_FAILED] : undefined;
+    return typeof failed === 'string' ? { frameId, result: /** @type {T} */ (null), error: failed } : { frameId, result: /** @type {T} */ (result) };
+  });
 }

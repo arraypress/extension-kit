@@ -2,8 +2,9 @@
  * Reading a tab: one of the extension's page modules called in every frame
  * Chrome lets it run in, the frames' answers top first; or why it can't be
  * read: a page Chrome keeps to itself (its own pages, the Web Store, other
- * extensions'), or no access (the tab went to another site since the click
- * that gave activeTab).
+ * extensions'), no access (the tab went to another site since the click
+ * that gave activeTab), the module failed in every frame, or no answer in
+ * time.
  *
  * @module scripting/tab
  */
@@ -25,6 +26,11 @@ export type TabReading<T> = {
     state: 'browser';
 } | {
     state: 'no-access';
+} | {
+    state: 'failed';
+    error: string;
+} | {
+    state: 'timeout';
 };
 export type TabEdges = {
     /**
@@ -40,8 +46,10 @@ export type TabEdges = {
  * What reading a tab gave.
  *
  * @template T
- * @typedef {{state: 'read', frames: FrameResult<T>[]} | {state: 'browser'} | {state: 'no-access'}} TabReading
+ * @typedef {{state: 'read', frames: FrameResult<T>[]} | {state: 'browser'} | {state: 'no-access'} | {state: 'failed', error: string} | {state: 'timeout'}} TabReading
  *   `frames`: each frame that answered (not null), the top one first, then in Chrome's frame order.
+ *   `failed`: no frame answered and the call threw in at least one (`error`: the first one's reason),
+ *   which Chrome itself reports as a bare null; `timeout`: `timeoutMs` passed first.
  */
 /**
  * The Chrome APIs a reading uses (fakes in unit tests).
@@ -59,10 +67,14 @@ export type TabEdges = {
  * @param {string} module - The module (in `web_accessible_resources`).
  * @param {string} name - The export.
  * @param {unknown[]} [args] - Its arguments.
+ * @param {{timeoutMs?: number}} [options] - `timeoutMs`: the longest to wait (Chrome answers once every
+ *   frame has, so one that never does would keep a panel waiting for ever); default none.
  * @returns {Promise<TabReading<T>>} The frames' answers, or why there are none.
  * @example
  * const reading = await callInTab(chrome, tabId, 'content/main.js', 'scan');
  * if (reading.state === 'read') show(reading.frames);
- * else showMessage(reading.state); // 'browser' or 'no-access'
+ * else showMessage(reading.state); // 'browser', 'no-access', 'failed' or 'timeout'
  */
-export declare function callInTab<T = unknown>(edges: TabEdges, tabId: number, module: string, name: string, args?: unknown[]): Promise<TabReading<T>>;
+export declare function callInTab<T = unknown>(edges: TabEdges, tabId: number, module: string, name: string, args?: unknown[], { timeoutMs }?: {
+    timeoutMs?: number;
+}): Promise<TabReading<T>>;
