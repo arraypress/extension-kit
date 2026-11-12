@@ -11,7 +11,7 @@ import { chromium } from 'playwright';
 import {
   HOOK_FILE, ICON_SIZES, PANEL_OPENER, RUNTIME_ENTRIES, STYLESHEET, TEST_BUILDS_ENV, VENDOR_STAMP, buildTestCopy, checkVendored,
   clonesFromReport, disallowedClones, packageDir, placeholderWarning, printReleaseChecks, renderIcons, repositoryReminder,
-  shipsFile, storeFrame, storeShotHtml, storeShots, contextMenuHtml, pngUrl, PANEL_W, testBuildDir, toolbarIconFile, vendorKit, vendorPackage,
+  shipsFile, storeFrame, storeShotHtml, storeShots, contextMenuHtml, pngUrl, PANEL_HEADER_H, PANEL_W, testBuildDir, toolbarIconFile, vendorKit, vendorPackage,
 } from '../src/build/index.js';
 import { filesUnder, missingReferences, referencedPath, zipEntries } from '../src/testing/index.js';
 
@@ -266,7 +266,7 @@ describe('store shots', () => {
     assert.match(html, /<img src="tb.png" width="16" height="16"/);
     assert.match(html, new RegExp(`<img src="page.png" width="${width - PANEL_W}" height="${height}"`));
     assert.match(html, /<span>Better Fonts<\/span>/);
-    assert.match(html, new RegExp(`<img src="panel.png" width="${PANEL_W}"`));
+    assert.match(html, new RegExp(`<img src="panel.png" width="${PANEL_W}" height="${height - PANEL_HEADER_H}"`));
     assert.equal((html.match(/class="ctx"/g) ?? []).length, 2);
     assert.equal((html.match(/class="ctx-sep"/g) ?? []).length, 1, 'its own separator class: the tab strip styles .sep');
     assert.match(html, /class="ctx-row on"><span class="ctx-ic"><img src="ext.png"[^>]*><\/span><span class="ctx-label">Better Copy<\/span><span class="ctx-arrow">/);

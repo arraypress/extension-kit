@@ -24,8 +24,8 @@ import { H, W, WIN, canvas, cursor, geometry, windowChrome } from './store-frame
 /** The side panel's width, as Chrome opens it (px). */
 export const PANEL_W = 360;
 
-/** The side panel's header: the extension's icon and name, and Chrome's close button (px). */
-const PANEL_HEADER_H = 40;
+/** The side panel's header: the extension's icon and name, and Chrome's close button (px). Capture a panel page `PANEL_HEADER_H` shorter than the content. */
+export const PANEL_HEADER_H = 40;
 
 /**
  * One row of the right-click menu.
@@ -82,7 +82,7 @@ export function contextMenuHtml({ x, y, items, submenu }) {
  * @property {string} [urlHost] The start of `url` shown in full; the rest dimmed.
  * @property {string} page The page's capture (a data: URL), at the content's size (less the side panel's when there's one).
  * @property {{image: string, width: number, height: number}} [popup] The popup's capture and its size: hung from the extension's toolbar button.
- * @property {{image: string, title: string, icon: string}} [panel] The side panel's capture (`PANEL_W` wide, the content's height less its header), the extension's name and icon for its header.
+ * @property {{image: string, title: string, icon: string}} [panel] The side panel's capture (`PANEL_W` wide, the content's height less `PANEL_HEADER_H`), the extension's name and icon for its header.
  * @property {Parameters<typeof contextMenuHtml>[0]} [menu] A right-click menu over the page.
  * @property {{x: number, y: number}} [pointer] The mouse pointer, in the content area.
  */
