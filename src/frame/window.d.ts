@@ -28,6 +28,13 @@ export declare const MAC_WINDOW: Readonly<{
 /** The window's default width (px): the store screenshot's. */
 export declare const WINDOW_W = 1152;
 /**
+ * Text made safe for the drawn windows' HTML (and the store screenshots').
+ *
+ * @param {unknown} s - Text.
+ * @returns {string} It, escaped for HTML text and attributes.
+ */
+export declare const esc: (s: unknown) => string;
+/**
  * A letter favicon for made-up sites (no real brands).
  *
  * @param {string} letter - The letter.

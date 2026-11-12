@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`counted(count, one, many, {t, lang})`** (`dom/i18n.js`): a count in words, the number as the language writes it. From Better Fonts' panel.
 - **`/testing`: `tabIdOf`, `callTabModule`, `pierceNodes`, `nodeAttribute`, `nodeText`**: a page's tab id, the page module called in its frames, and its whole tree through CDP (closed shadow roots, frames). From Better Fonts' e2e helpers.
 - **`runLiveCheck`** and `liveUsage` (`/testing`): a live checker's whole run (command line, sites chosen, exit point, browsers a slot each, time limits, Ctrl-C), from Better Fonts' `test/live/run.mjs`; Better Colours' checker uses it.
+- **`storeShots`, `storeShotHtml`, `contextMenuHtml`, `pngUrl`, `PANEL_W`** (`/build`, `build/store-shots.js`): the family's store screenshots in one style, on `storeFrame`'s canvas and window: the extension pinned in the toolbar, real captures inside, and what headless Chrome can't capture composed around the real extension UI (the popup hung from the pressed toolbar button, the side panel with its header, the right-click menu as macOS draws Chrome's); writes 1280×800 PNGs. Better Copy, Better Screenshots, Better Fonts and Better Colours make theirs with it.
 - **`buildTestCopy`'s `panelOpener`** and `PANEL_OPENER` (`/build`): the test page that opens the real side panel from a click, from Better Fonts' and Better Saves' copies of `open-panel.html`.
 
 ### Fixed

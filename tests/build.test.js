@@ -11,7 +11,7 @@ import { chromium } from 'playwright';
 import {
   HOOK_FILE, ICON_SIZES, PANEL_OPENER, RUNTIME_ENTRIES, STYLESHEET, TEST_BUILDS_ENV, VENDOR_STAMP, buildTestCopy, checkVendored,
   clonesFromReport, disallowedClones, packageDir, placeholderWarning, printReleaseChecks, renderIcons, repositoryReminder,
-  shipsFile, storeFrame, testBuildDir, toolbarIconFile, vendorKit, vendorPackage,
+  shipsFile, storeFrame, storeShotHtml, storeShots, contextMenuHtml, pngUrl, PANEL_W, testBuildDir, toolbarIconFile, vendorKit, vendorPackage,
 } from '../src/build/index.js';
 import { filesUnder, missingReferences, referencedPath, zipEntries } from '../src/testing/index.js';
 
@@ -251,6 +251,73 @@ describe('store frame', () => {
     assert.match(html, /<div class="caption">Rotate any image<\/div>/);
     assert.match(html, /<span class="title">A &lt;b&gt;<\/span>/);
     assert.match(html, /<img src="shot.png" width="922" height="462"/);
+  });
+});
+
+describe('store shots', () => {
+  it('a caption, the window with the extension in the toolbar, the page; a side panel beside it with the extension’s name; a menu with its rows', () => {
+    const html = storeShotHtml({
+      caption: 'Copy <any> page', tabs: [{ title: 'Notes', icon: 'n.png', active: true }], url: 'notes.example/a', page: 'page.png', toolbarIcon: 'tb.png',
+      panel: { image: 'panel.png', title: 'Better Fonts', icon: 'ext.png' },
+      menu: { x: 10, y: 20, items: [{ label: 'Back' }, {}, { label: 'Better Copy', icon: 'ext.png', submenu: true, highlighted: true }], submenu: [{ label: 'Copy page as Markdown' }] },
+    });
+    const { width, height } = storeFrame.geometry(1).content;
+    assert.match(html, /<div class="caption">Copy &lt;any&gt; page<\/div>/);
+    assert.match(html, /<img src="tb.png" width="16" height="16"/);
+    assert.match(html, new RegExp(`<img src="page.png" width="${width - PANEL_W}" height="${height}"`));
+    assert.match(html, /<span>Better Fonts<\/span>/);
+    assert.match(html, new RegExp(`<img src="panel.png" width="${PANEL_W}"`));
+    assert.equal((html.match(/class="ctx"/g) ?? []).length, 2);
+    assert.match(html, /class="row on"><span class="ic"><img src="ext.png"[^>]*><\/span><span class="label">Better Copy<\/span><span class="arrow">/);
+    assert.doesNotMatch(html, /class="popup"/);
+  });
+
+  it('a submenu only beside a highlighted row that has one', () => {
+    assert.equal((contextMenuHtml({ x: 0, y: 0, items: [{ label: 'A', submenu: true }], submenu: [{ label: 'B' }] }).match(/class="ctx"/g) ?? []).length, 1);
+  });
+
+  it('writes a 1280×800 PNG, the popup hung from the extension’s pressed button under the toolbar', async () => {
+    const browser = await chromium.launch();
+    const dir = await mkdtemp(path.join(tmpdir(), 'store-shots-'));
+    try {
+      const blank = async (/** @type {number} */ w, /** @type {number} */ h, /** @type {string} */ colour) => {
+        const page = await browser.newPage({ viewport: { width: w, height: h } });
+        await page.setContent(`<body style="margin:0;background:${colour}">`);
+        const png = await page.screenshot();
+        await page.close();
+        return pngUrl(png);
+      };
+      const { geo, shoot } = storeShots({ browser, dir, toolbarIcon: await blank(16, 16, '#0b57d0') });
+      const out = await shoot('1.png', {
+        caption: 'One', tabs: [{ title: 'A', icon: await blank(16, 16, '#888'), active: true }], url: 'a.example',
+        page: await blank(geo.content.width, geo.content.height, '#ffffff'), popup: { image: await blank(300, 200, '#ff0000'), width: 300, height: 200 },
+      });
+      const png = await readFile(out);
+      assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1280, 800]);
+      const page = await browser.newPage();
+      const found = await page.evaluate(async (url) => {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const canvas = new OffscreenCanvas(img.width, img.height);
+        const ctx = /** @type {OffscreenCanvasRenderingContext2D} */ (canvas.getContext('2d'));
+        ctx.drawImage(img, 0, 0);
+        const { data } = ctx.getImageData(0, 0, img.width, img.height);
+        let left = img.width, right = 0, top = img.height;
+        for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
+          const i = (y * img.width + x) * 4;
+          if (data[i] > 250 && data[i + 1] < 5 && data[i + 2] < 5) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); }
+        }
+        return { left, right, top };
+      }, pngUrl(png));
+      await page.close();
+      assert.equal(found.right - found.left + 1, 300);
+      assert.ok(found.right > 1280 - 200 && found.right < 1280 - 64, `the popup's right edge near the toolbar button: ${found.right}`);
+      assert.ok(Math.abs(found.top - (112 + 42 + 46 - 2)) <= 1, `the popup just under the toolbar: ${found.top}`);
+    } finally {
+      await browser.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

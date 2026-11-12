@@ -26,10 +26,12 @@ export const MAC_WINDOW = Object.freeze({ titleBar: 32, radius: 16 });
 export const WINDOW_W = 1152;
 
 /**
+ * Text made safe for the drawn windows' HTML (and the store screenshots').
+ *
  * @param {unknown} s - Text.
  * @returns {string} It, escaped for HTML text and attributes.
  */
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+export const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** Material icon paths (24×24). */
 const P = {
