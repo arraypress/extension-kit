@@ -2,6 +2,9 @@
  * Chrome's toast (cr-toast), bottom left, as chrome://bookmarks shows one
  * after a delete: "Deleted “Research”  Undo". One per page, made by
  * {@link createToast}; a new message replaces the last and restarts the wait.
+ * While the keyboard focus is on Undo, or the pointer is over the toast, it
+ * stays, and the wait starts again in full once they leave (cr-toast stops
+ * its timer on `focusin` and restarts it on `focusout`).
  *
  * It's a manual `popover`, so it shows in the top layer: over anything the
  * page stacks (a content script's toast over a site's own fixed bars), and
