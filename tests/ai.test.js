@@ -177,6 +177,13 @@ describe('createModelRow (jsdom)', () => {
   /** The page's messages: the key, and any substitutions. @param {string} key @param {string | string[]} [subs] */
   const t = (key, subs) => (subs ? `${key}(${[subs].flat().join(',')})` : key);
 
+  /** Show the row's state, click Download and let the download run. @param {import('../src/index.js').ModelRow} row @param {HTMLButtonElement} download */
+  const downloaded = async (row, download) => {
+    await row.refresh();
+    download.click();
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+  };
+
   it('shows the state, offers Download only when it can be had, and downloads from the click with progress', async () => {
     const { parts, window } = page();
     const model = fakeLanguageModel({ availability: 'downloadable' });
@@ -215,9 +222,7 @@ describe('createModelRow (jsdom)', () => {
       options: ENGLISH, t, model: () => model,
       state: async () => { if (asked++) throw new Error('Could not establish connection.'); return 'downloadable'; },
     });
-    await row.refresh();
-    parts.download.click();
-    await new Promise((resolve) => { setTimeout(resolve, 20); });
+    await downloaded(row, parts.download);
     assert.equal(parts.status.textContent, 'optionsModelReady');
     assert.equal(parts.progress.hidden, true);
     assert.equal(row.current(), 'available');
@@ -227,9 +232,7 @@ describe('createModelRow (jsdom)', () => {
     const { parts } = page();
     const model = fakeLanguageModel({ availability: 'downloadable', failDownload: true });
     const row = createModelRow(parts, { options: ENGLISH, t, model: () => model, state: () => modelAvailability(model, ENGLISH) });
-    await row.refresh();
-    parts.download.click();
-    await new Promise((resolve) => { setTimeout(resolve, 20); });
+    await downloaded(row, parts.download);
     assert.equal(parts.help.textContent, 'optionsModelDownloadFailed');
     assert.equal(parts.download.hidden, false);
     assert.equal(parts.download.disabled, false);

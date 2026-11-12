@@ -452,7 +452,9 @@ hands the main thread back whenever a slice has run its time, so a 2,000-item li
 freezes. `eachInSlices(items, work, {sliceMs, pause})` does the same for any list (each element's
 style read, each text measured): `work(item, index)`. `watchChanges` hands over what was added or changed a little after the page stops
 changing (at most `maxWaitMs` while it keeps on); an element with a few children (`regroupChildren`,
-default 6) whose children changed is handed over whole. Both are pure DOM, so a content script
+default 6) whose children changed is handed over whole; what changes inside the extension's own
+elements (`ignore`, asked of a change's target and its ancestors) sets nothing off. `inSlices` cuts
+the page as the work goes and leaves out scripts, styles and templates. Both are pure DOM, so a content script
 imports them directly (list them in `web_accessible_resources`).
 
 `renderedElements(doc, {skip, limit})` (`content/elements.js`) lists every element Chrome draws,
