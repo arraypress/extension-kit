@@ -365,6 +365,52 @@ describe('packaging', () => {
     assert.equal(referencedPath('#top'), '');
   }));
 
+  it('missingReferences: a file that’s there but left out of the zip is missing too', () => inTemp(async (dir) => {
+    await writeTree(dir, {
+      'manifest.json': '{}', 'icons/logo.svg': '<svg/>', 'icons/icon-16.png': 'png', [`vendor/kit/${VENDOR_STAMP}`]: '{}', 'types.d.ts': '',
+      'options/options.html': '<img src="../icons/logo.svg"><img src="/icons/icon-16.png"><img src="/icons/gone.png">',
+      'options/options.js': "chrome.runtime.getURL('vendor/kit/vendored.json');\nchrome.runtime.getURL('icons/icon-16.png');",
+    });
+    assert.deepEqual(await missingReferences(dir), [
+      'options → ../icons/logo.svg',
+      'options → /icons/gone.png',
+      'root → vendor/kit/vendored.json',
+    ]);
+  }));
+
+  it('missingReferences reads every way a file is named: bare and double-quoted imports, single-quoted attributes, stylesheets, the manifest’s scripts, locale and rules', () => inTemp(async (dir) => {
+    await writeTree(dir, {
+      'manifest.json': JSON.stringify({
+        content_scripts: [{ matches: ['<all_urls>'], js: ['content/main.js', 'content/gone.js'], css: ['content/gone.css'] }],
+        default_locale: 'en', options_page: 'gone.html', devtools_page: 'page.html',
+        declarative_net_request: { rule_resources: [{ id: 'rules', enabled: true, path: 'rules/gone.json' }] },
+        chrome_url_overrides: { newtab: 'newtab-gone.html' }, web_accessible_resources: [{ resources: ['content/*.js'], matches: ['<all_urls>'] }],
+      }),
+      'content/main.js': [
+        "import './polyfill-gone.js';", 'import { a } from "./double-gone.js";', "const lazy = import(\"./lazy-gone.js\");", "import './here.js';",
+        ' * import \'./in-a-comment.js\';', 'chrome.runtime.getURL("gone.png");',
+      ].join('\n'),
+      'content/here.js': '',
+      'page.html': "<link rel='stylesheet' href='single-gone.css'><link rel=\"stylesheet\" href=\"page.css\">",
+      'page.css': '@import "import-gone.css"; .a { background: url(img/gone.png) } .b { background: url("data:image/png;base64,AA") } .c { background: url(\'page.css\') }',
+    });
+    assert.deepEqual(await missingReferences(dir), [
+      'content → ./double-gone.js',
+      'content → ./lazy-gone.js',
+      'content → ./polyfill-gone.js',
+      'root → gone.png',
+      '. → img/gone.png',
+      '. → import-gone.css',
+      '. → single-gone.css',
+      'root → gone.html',
+      'root → content/gone.js',
+      'root → content/gone.css',
+      'root → _locales/en/messages.json',
+      'root → rules/gone.json',
+      'root → newtab-gone.html',
+    ]);
+  }));
+
   it('names toolbar icon files by scheme and size', () => {
     assert.equal(toolbarIconFile('dark', 32), 'dark-32.png');
   });
