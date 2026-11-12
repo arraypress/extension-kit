@@ -4,7 +4,8 @@
  * `chrome.scripting`. A site typed as a match pattern still registers (and the pattern it used
  * to make is one Chrome refuses, with the whole registration); a page module listed with
  * `use_dynamic_url` is still imported by `callInPage`, and the page can no longer load it to
- * tell the extension is there; and a worker without a Prompt API of its own gets its answers
+ * tell the extension is there, but such a module can't import its parts (so the family's page
+ * modules, which do, are listed without it); and a worker without a Prompt API of its own gets its answers
  * from the offscreen document, over Chrome's real messages.
  *
  * @module tests/chrome-chromium
@@ -31,7 +32,7 @@ const MANIFEST = {
   host_permissions: ['<all_urls>'],
   background: { service_worker: 'worker.js', type: 'module' },
   web_accessible_resources: [
-    { resources: ['content/hidden.js'], matches: ['<all_urls>'], use_dynamic_url: true },
+    { resources: ['content/hidden.js', 'content/hidden-whole.js', 'content/hidden-part.js'], matches: ['<all_urls>'], use_dynamic_url: true },
     { resources: ['content/plain.js'], matches: ['<all_urls>'] },
   ],
 };
@@ -54,6 +55,9 @@ describe('the kit in a real extension', () => {
     dir = await mkdtemp(path.join(tmpdir(), 'extension-kit-chrome-'));
     await cp(path.join(ROOT, 'src'), path.join(dir, 'kit'), { recursive: true, filter: (from) => !/\/(testing|build)(\/|$)/.test(from.slice(ROOT.length)) });
     await cp(path.join(ROOT, 'tests/fixtures/page-module.js'), path.join(dir, 'content/hidden.js'));
+    // A module that imports another, as the family's content modules import their parts and the kit.
+    await cp(path.join(ROOT, 'tests/fixtures/page-module.js'), path.join(dir, 'content/hidden-part.js'));
+    await writeFile(path.join(dir, 'content/hidden-whole.js'), "export { echo } from './hidden-part.js';\n");
     await cp(path.join(ROOT, 'tests/fixtures/page-module.js'), path.join(dir, 'content/plain.js'));
     await writeFile(path.join(dir, 'content/script.js'), '');
     await writeFile(path.join(dir, 'manifest.json'), JSON.stringify(MANIFEST));
@@ -96,7 +100,7 @@ serveModelOffscreen(chrome.runtime, { model: () => (location.hash === '#real' ? 
     assert.deepEqual(outcome.excludes?.toSorted(), ['*://*.example.com/*', '*://*.news.example.org/*', '*://example.com/*', '*://news.example.org/*']);
   });
 
-  it('callInPage imports a module listed with use_dynamic_url, which the page itself can’t load', async () => {
+  it('use_dynamic_url: callInPage imports a single-file module the page can’t load; a module with static imports fails', async () => {
     const page = await extension.context.newPage();
     await page.goto(site.origin);
     const called = await extension.worker.evaluate(async (origin) => {
@@ -105,10 +109,13 @@ serveModelOffscreen(chrome.runtime, { model: () => (location.hash === '#real' ? 
       const target = { tabId: /** @type {number} */ (tab.id) };
       const [hidden] = await callInPage(chrome.scripting, target, 'content/hidden.js', 'echo', ['a']);
       const [again] = await callInPage(chrome.scripting, target, 'content/hidden.js', 'echo', ['b']);
-      return { hidden: hidden.result, again: again.result };
+      const whole = await callInPage(chrome.scripting, target, 'content/hidden-whole.js', 'echo', ['c']).then(([frame]) => frame.result, (/** @type {Error} */ error) => error.message);
+      return { hidden: hidden.result, again: again.result, whole };
     }, site.origin);
     assert.deepEqual(called.hidden, { echo: ['a'], calls: 1 });
     assert.deepEqual(called.again, { echo: ['b'], calls: 2 }); // The same module instance: its state is kept.
+    // Chrome refuses the dynamic-URL module's own `import './hidden-part.js'`: why the family doesn't use it.
+    assert.notDeepEqual(called.whole, { echo: ['c'], calls: 1 });
 
     /** @param {string} file */
     const fromPage = (file) => page.evaluate((url) => import(url).then(() => 'loaded', () => 'refused'), extension.url(file));

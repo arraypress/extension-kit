@@ -6,11 +6,12 @@
  * The module, and anything it keeps, stays loaded in that world between calls,
  * so a content script can hold a session (a picker, an inspector) across them.
  *
- * List the modules with `"use_dynamic_url": true`: a page can then no longer
- * load them by the extension's address (its `import()` and `fetch()` are
- * refused), so it can't tell the extension is installed, while this import
- * from the isolated world works as before (checked in Chromium 156,
- * tests/chrome-chromium.test.js).
+ * `"use_dynamic_url": true` on those resources would keep a page from loading
+ * them to tell the extension is installed, and this import still works with
+ * it, but only for a module with no static imports: Chrome refuses a
+ * dynamic-URL module's `import … from './part.js'` (checked in Chromium 156,
+ * tests/chrome-chromium.test.js). So it suits a single-file (bundled) page
+ * module, not one that imports its parts.
  *
  * @module scripting/call
  */

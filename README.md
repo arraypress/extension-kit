@@ -265,15 +265,13 @@ const highlight = createHighlighter(document, { root: () => root });
 highlight.show(elements, { reveal: true });
 ```
 
-List the page modules with `use_dynamic_url`, so a web page can't load them to find out the
-extension is installed (a static `chrome-extension://<id>/content/main.js` answers any page that
-asks; with `use_dynamic_url` the page's `import()` and `fetch()` are refused, and `callInPage`'s
-own import from the isolated world still works: checked in Chromium 156,
-`tests/chrome-chromium.test.js`):
-
-```json
-"web_accessible_resources": [{ "resources": ["content/*.js", "vendor/extension-kit/*"], "matches": ["<all_urls>"], "use_dynamic_url": true }]
-```
+A page can load a web-accessible module by the extension's address, and so tell the extension
+is installed. `"use_dynamic_url": true` stops that (the page's `import()` and `fetch()` are
+refused) and `callInPage`'s own import still works, but **only for a module with no static
+imports**: Chrome refuses a dynamic-URL module's `import … from './part.js'` (checked in Chromium
+156, `tests/chrome-chromium.test.js`). The family's page modules import their parts and the kit
+statically and have no bundler, so they are listed without it; a single-file page module (a
+bundled one) can use it.
 
 `callInPage(scripting, target, module, name, args, {immediately})` resolves to each frame's
 `{frameId, result}` (frames Chrome couldn't run in left out) and rejects when it can run in none;
