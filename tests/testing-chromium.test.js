@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import {
-  extensionProfile, filesIn, installWarnings, launchDownloading, launchExtension, savedTabGroups, serve, until, warningsAddedBy,
+  extensionProfile, filesIn, installWarnings, launchDownloading, launchExtension, savedTabGroups, serve, stopWorker, until, warningsAddedBy,
   withoutPermissions,
 } from '../src/testing/index.js';
 
@@ -53,6 +53,34 @@ describe('install warnings', () => {
         warnings: ['Read your browsing history'], without: ['Read your browsing history'], added: [],
       });
       assert.deepEqual((await warningsAddedBy(worker, manifest, ['tabs'])).added, ['Read your browsing history']);
+    } finally {
+      await close();
+    }
+  }));
+});
+
+describe('stopWorker', () => {
+  it('stops the service worker as Chrome does when idle: memory gone, storage kept, the same handle on the new one', () => withExtension({ permissions: ['storage'] }, async (dir) => {
+    await writeFile(path.join(dir, 'worker.js'), 'globalThis.starts = 1; chrome.runtime.onMessage.addListener((message, sender, reply) => { reply(`heard ${message}`); });');
+    const launched = await launchExtension(chromium, dir);
+    const { context, worker, url, close } = launched;
+    try {
+      await worker.evaluate(async () => {
+        Object.assign(globalThis, { remembered: 'in memory' });
+        await chrome.storage.local.set({ kept: 'in storage' });
+      });
+      await stopWorker(launched);
+      assert.deepEqual(await worker.evaluate(async () => ({
+        starts: /** @type {any} */ (globalThis).starts, remembered: /** @type {any} */ (globalThis).remembered ?? null, ...await chrome.storage.local.get('kept'),
+      })), { starts: 1, remembered: null, kept: 'in storage' });
+
+      // Left stopped: the next event starts it, as on a person's computer.
+      await worker.evaluate(() => { Object.assign(globalThis, { remembered: 'again' }); });
+      await stopWorker(launched, { start: false });
+      const page = await context.newPage();
+      await page.goto(url('manifest.json'));
+      assert.equal(await page.evaluate(() => chrome.runtime.sendMessage('a message')), 'heard a message');
+      assert.equal(await worker.evaluate(() => /** @type {any} */ (globalThis).remembered ?? null), null);
     } finally {
       await close();
     }

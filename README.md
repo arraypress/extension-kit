@@ -599,6 +599,7 @@ except those listed, each with a reason:
 | `until(fn, what, timeout?)` | Poll until truthy. |
 | `offscreenEmulator(cdp)` | Emulate light/dark inside the offscreen document. |
 | `recordIconCalls(worker)` | Record `chrome.action.setIcon` calls Chrome accepted. |
+| `stopWorker(launched, {start})` | Stop the service worker as Chrome does when it's idle (memory gone, storage kept) and start it again, or leave it for the next event: for checks that state survives a restart. Playwright's debugger otherwise keeps the worker alive for the whole run. |
 | `installWarnings(worker, manifest)` | Chrome's own install warnings for a manifest (`chrome.management.getPermissionWarningsByManifest`, no permission needed), from a loaded extension's worker. |
 | `warningsAddedBy(worker, manifest, names)` | `{warnings, without, added}`: the warnings with and without some permissions, and those only they bring (`withoutPermissions` is the pure part). |
 | `savedTabGroups(profile)` | Chrome's saved tab groups (`{title, pinned, urls}`) read from a closed profile's `Sync Data/LevelDB`: no extension API lists them. |

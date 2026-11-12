@@ -138,6 +138,56 @@ export async function launchExtension(chromium, dir, options = {}) {
 }
 
 /**
+ * Stop the extension's service worker, as Chrome does after 30 seconds idle: its globals,
+ * timers and anything else kept in memory are gone; storage, alarms and registered listeners
+ * stay. Chrome never does this by itself in an e2e run (Playwright's debugger keeps the worker
+ * alive), so a check that state survives a restart has to ask for it. Done through the
+ * DevTools protocol from a page of the extension (`ServiceWorker.stopWorker`), and, unless
+ * `start` is false, the worker is started again with no event (`ServiceWorker.startWorker`).
+ *
+ * `launched.worker` stays the handle to use: Playwright keeps it across the restart. Anything a
+ * test put in the old worker (`recordIconCalls`, a patched `chrome.*` function) is gone with it.
+ *
+ * @param {Pick<LaunchedExtension, 'context' | 'worker' | 'extensionId' | 'url'>} launched - From {@link launchExtension}.
+ * @param {{start?: boolean, page?: string}} [options] - `start: false` leaves the worker stopped, for
+ *   the next event (a message, an alarm, a tab) to start it as on a person's computer; `page`: a file
+ *   of the extension to open for the protocol session (default `manifest.json`).
+ * @returns {Promise<void>} Once the worker has stopped (and, with `start`, is running again).
+ * @throws {Error} When the worker isn't running, or doesn't stop or start in 10 s.
+ *
+ * @example
+ * await worker.evaluate(() => { globalThis.cache = { tab: 7 }; });
+ * await stopWorker(launched);
+ * await worker.evaluate(() => globalThis.cache); // undefined: what wasn't stored is gone
+ */
+export async function stopWorker({ context, worker, extensionId, url }, { start = true, page: file = 'manifest.json' } = {}) {
+  const page = await context.newPage();
+  try {
+    await page.goto(url(file));
+    const cdp = await context.newCDPSession(page);
+    /** @type {Map<string, {versionId: string, scriptURL: string, runningStatus: string}>} */
+    const versions = new Map();
+    cdp.on('ServiceWorker.workerVersionUpdated', (event) => {
+      for (const version of event.versions) versions.set(version.versionId, version);
+    });
+    await cdp.send('ServiceWorker.enable');
+    const own = () => [...versions.values()].filter((version) => version.scriptURL === worker.url());
+    const running = await until(() => own().find((version) => version.runningStatus === 'running'), 'the service worker to be running', 10_000);
+    await cdp.send('ServiceWorker.stopWorker', { versionId: running.versionId });
+    await until(() => own().every((version) => version.runningStatus === 'stopped'), 'the service worker to stop', 10_000);
+    if (start) {
+      await cdp.send('ServiceWorker.startWorker', { scopeURL: `chrome-extension://${extensionId}/` });
+      await until(() => own().some((version) => version.runningStatus === 'running'), 'the service worker to start again', 10_000);
+      // Running, and answering: its script has run again.
+      await worker.evaluate(() => true);
+    }
+    await cdp.detach();
+  } finally {
+    await page.close();
+  }
+}
+
+/**
  * Emulate colour schemes in the offscreen document: one CDP session attached
  * to it, reused for every change.
  *

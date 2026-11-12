@@ -10,7 +10,7 @@
 export { TEST_BUILDS_ENV, testBuildDir } from '../build/test-build.js';
 export { chromeUserAgent, closeOnSignal, realisticBrowser } from './browser.js';
 export {
-  CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, runChecks, until,
+  CHECK_MS, checkRunner, checkToolbarTheme, extensionProfile, launchExtension, offscreenEmulator, recordIconCalls, runChecks, stopWorker, until,
 } from './e2e.js';
 export { exitPoint, parseLiveOptions, parseProxy } from './live.js';
 export { liveUsage, runLiveCheck } from './live-run.js';
