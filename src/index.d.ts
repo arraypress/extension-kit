@@ -31,8 +31,9 @@ export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, wi
 export { counted, localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
+export { createShowOnPage } from './panel/show-on-page.js';
 export { openSidePanel, sidePanelPath } from './panel/side-panel.js';
-export { callInPage, importAndCall } from './scripting/call.js';
+export { CALL_FAILED, callInPage, importAndCall } from './scripting/call.js';
 export { contextMenuBuilder } from './scripting/context-menus.js';
 export { contentScriptSync } from './scripting/registration.js';
 export { callInTab, isBrowserPage } from './scripting/tab.js';
@@ -61,6 +62,8 @@ export type ModelSession = import('./ai/model.js').ModelSession;
 export type ModelStatus = import('./ai/model.js').ModelStatus;
 export type SliceOptions = import('./content/slices.js').SliceOptions;
 export type Highlighter = import('./content/highlight.js').Highlighter;
+export type ClearReason = import('./content/highlight.js').ClearReason;
+export type ShowOnPage = import('./panel/show-on-page.js').ShowOnPage;
 export type PageOverlay = import('./content/overlay.js').PageOverlay;
 export type ClipboardFormats = import('./dom/copy.js').ClipboardFormats;
 export type WatchHandlers = import('./content/watch.js').WatchHandlers;
@@ -95,6 +98,8 @@ export type Toast = import('./ui/toast.js').Toast;
  * @typedef {import('./ai/model.js').ModelStatus} ModelStatus
  * @typedef {import('./content/slices.js').SliceOptions} SliceOptions
  * @typedef {import('./content/highlight.js').Highlighter} Highlighter
+ * @typedef {import('./content/highlight.js').ClearReason} ClearReason
+ * @typedef {import('./panel/show-on-page.js').ShowOnPage} ShowOnPage
  * @typedef {import('./content/overlay.js').PageOverlay} PageOverlay
  * @typedef {import('./dom/copy.js').ClipboardFormats} ClipboardFormats
  * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers

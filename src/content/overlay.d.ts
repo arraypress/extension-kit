@@ -19,6 +19,10 @@ export type PageOverlay = {
      * Take it off the page.
      */
     remove: () => void;
+    /**
+     * With `topLayer`: put it over whatever entered the top layer since.
+     */
+    raise: () => void;
 };
 /**
  * A page overlay.
@@ -27,6 +31,7 @@ export type PageOverlay = {
  * @property {HTMLElement} host The host element, on the page's root element.
  * @property {ShadowRoot} root Its closed shadow root, the styles first: append to it.
  * @property {() => void} remove Take it off the page.
+ * @property {() => void} raise With `topLayer`: put it over whatever entered the top layer since.
  */
 /**
  * Put an overlay on the page, replacing one of the same name a run before left.
@@ -37,10 +42,18 @@ export type PageOverlay = {
  * with `!important` after the reset. `css` styles what's inside (and `:host` custom properties,
  * which the reset doesn't touch).
  *
+ * With `topLayer` the host is a manual popover, shown: it draws in the top layer, over the page's
+ * modal dialogs, popovers and fullscreen element, which no `z-index` reaches. The top layer
+ * paints in the order things entered it, so the overlay goes back on top (`raise`) whenever the
+ * page opens a dialog or a popover or goes fullscreen after it. What a modal dialog makes inert
+ * stays inert, the overlay with it: it shows over the dialog, but can't be clicked while the
+ * dialog is open.
+ *
  * @param {Document} doc - The page.
- * @param {{name: string, css: string, hostStyle?: Record<string, string>}} options - `name`: the
- *   host's element name, with a hyphen (never registered: a plain element); `css`: the overlay's
- *   styles; `hostStyle`: the host's own styles by CSS property name (`'z-index'`), each `!important`.
+ * @param {{name: string, css: string, hostStyle?: Record<string, string>, topLayer?: boolean}} options -
+ *   `name`: the host's element name, with a hyphen (never registered: a plain element); `css`: the
+ *   overlay's styles; `hostStyle`: the host's own styles by CSS property name (`'z-index'`), each
+ *   `!important`; `topLayer`: draw over the page's dialogs and fullscreen element. Default false.
  * @returns {PageOverlay} The overlay.
  * @example
  * const { root, remove } = pageOverlay(document, {
@@ -50,8 +63,9 @@ export type PageOverlay = {
  * });
  * root.append(card);
  */
-export declare function pageOverlay(doc: Document, { name, css, hostStyle }: {
+export declare function pageOverlay(doc: Document, { name, css, hostStyle, topLayer }: {
     name: string;
     css: string;
     hostStyle?: Record<string, string>;
+    topLayer?: boolean;
 }): PageOverlay;

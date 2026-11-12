@@ -694,6 +694,77 @@ describe('pageOverlay (Chromium)', () => {
   });
 });
 
+describe('pageOverlay in the top layer (Chromium)', () => {
+  /**
+   * The colour of one pixel of the page as Chrome paints it.
+   *
+   * @param {Page} page - The page.
+   * @param {number} x - Across.
+   * @param {number} y - Down.
+   * @returns {Promise<number[]>} Red, green, blue.
+   */
+  const pixel = async (page, x, y) => {
+    const shot = (await page.screenshot({ clip: { x, y, width: 1, height: 1 } })).toString('base64');
+    return page.evaluate(async (png) => {
+      const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${png}`)).blob());
+      const context = /** @type {OffscreenCanvasRenderingContext2D} */ (new OffscreenCanvas(1, 1).getContext('2d'));
+      context.drawImage(bitmap, 0, 0);
+      return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+    }, shot);
+  };
+  const RED = [255, 0, 0];
+  /** @param {Page} page @param {boolean} topLayer */
+  const overlayWithCard = (page, topLayer) => page.evaluate((top) => {
+    const { kit } = /** @type {any} */ (window);
+    const overlay = kit.pageOverlay(document, { name: 'top-overlay', css: '.card { position: fixed; left: 0; top: 0; width: 50px; height: 50px; background: rgb(255 0 0); }', hostStyle: { position: 'fixed', inset: '0', 'pointer-events': 'none' }, topLayer: top });
+    const card = document.createElement('div');
+    card.className = 'card';
+    overlay.root.append(card);
+    /** @type {any} */ (window).overlay = overlay;
+    const dialog = document.createElement('dialog');
+    dialog.style.cssText = 'position: fixed; inset: 0; margin: 0; width: 100vw; height: 100vh; max-width: none; max-height: none; border: 0; background: rgb(0 0 255);';
+    document.body.append(dialog);
+    /** @type {any} */ (window).dialog = dialog;
+  }, topLayer);
+
+  it('draws over a modal dialog the page opens after it; an ordinary overlay is covered', async () => {
+    const page = await open('/content');
+    await overlayWithCard(page, false);
+    await page.evaluate(() => /** @type {any} */ (window).dialog.showModal());
+    assert.notDeepEqual(await pixel(page, 10, 10), RED, 'no z-index reaches over the top layer');
+    await page.close();
+
+    const top = await open('/content');
+    await overlayWithCard(top, true);
+    assert.deepEqual(await pixel(top, 10, 10), RED);
+    await top.evaluate(() => /** @type {any} */ (window).dialog.showModal());
+    await top.waitForFunction(() => /** @type {any} */ (window).overlay.host.matches(':popover-open'));
+    assert.deepEqual(await pixel(top, 10, 10), RED, 'raised over the dialog that opened after it');
+    // The host keeps the styles it was given: the popover's own (a border, a canvas background, centred) lose to the reset.
+    const styles = await top.evaluate(() => {
+      const style = getComputedStyle(/** @type {any} */ (window).overlay.host);
+      return [style.position, style.top, style.borderTopWidth, style.backgroundColor, style.pointerEvents];
+    });
+    assert.deepEqual(styles, ['fixed', '0px', '0px', 'rgba(0, 0, 0, 0)', 'none']);
+    await top.close();
+  });
+
+  it('remove() takes it away and stops watching the page; raise() after that does nothing', async () => {
+    const page = await open('/content');
+    await overlayWithCard(page, true);
+    const left = await page.evaluate(() => {
+      const { overlay, dialog } = /** @type {any} */ (window);
+      overlay.remove();
+      dialog.showModal();
+      overlay.raise();
+      return document.querySelectorAll('top-overlay').length;
+    });
+    assert.equal(left, 0);
+    assert.notDeepEqual(await pixel(page, 10, 10), RED);
+    await page.close();
+  });
+});
+
 describe('createHighlighter (Chromium)', () => {
   it('boxes each element where it is, moves the boxes as the page scrolls, leaves out what’s off screen, and Esc clears them', async () => {
     const page = await open('/content');
@@ -702,7 +773,8 @@ describe('createHighlighter (Chromium)', () => {
       const overlay = kit.pageOverlay(document, { name: 'box-overlay', css: kit.HIGHLIGHT_CSS, hostStyle: { position: 'absolute', top: '0', left: '0' } });
       /** @type {any} */ (window).cleared = 0;
       /** @type {any} */ (window).root = overlay.root;
-      /** @type {any} */ (window).highlight = kit.createHighlighter(document, { root: () => overlay.root, onClear: () => { /** @type {any} */ (window).cleared += 1; } });
+      /** @type {any} */ (window).reasons = [];
+      /** @type {any} */ (window).highlight = kit.createHighlighter(document, { root: () => overlay.root, onClear: (/** @type {string} */ reason) => { /** @type {any} */ (window).cleared += 1; /** @type {any} */ (window).reasons.push(reason); } });
       const count = /** @type {any} */ (window).highlight.show(['one', 'two', 'far'].map((id) => document.getElementById(id)));
       return { count, boxes: [...overlay.root.querySelectorAll('.box')].map((box) => box.getBoundingClientRect().toJSON()) };
     });
@@ -714,6 +786,39 @@ describe('createHighlighter (Chromium)', () => {
     await page.keyboard.press('Escape');
     const after = await page.evaluate(() => ({ boxes: /** @type {any} */ (window).root.querySelectorAll('.box').length, cleared: /** @type {any} */ (window).cleared }));
     assert.deepEqual(after, { boxes: 0, cleared: 1 });
+    await page.close();
+  });
+
+  it('onClear is told why: Esc, another set, clear(), the page left; the same boxes are moved as the page scrolls, none made', async () => {
+    const page = await open('/content');
+    await page.evaluate(() => {
+      const { kit } = /** @type {any} */ (window);
+      const overlay = kit.pageOverlay(document, { name: 'box-overlay', css: kit.HIGHLIGHT_CSS });
+      /** @type {any} */ (window).root = overlay.root;
+      /** @type {any} */ (window).reasons = [];
+      /** @type {any} */ (window).highlight = kit.createHighlighter(document, { root: () => overlay.root, onClear: (/** @type {string} */ reason) => /** @type {any} */ (window).reasons.push(reason) });
+      /** @type {any} */ (window).highlight.show([document.getElementById('one'), document.getElementById('two')]);
+      /** @type {any} */ (window).firstBoxes = [...overlay.root.querySelectorAll('.box')];
+    });
+    await page.evaluate(() => scrollTo(0, 10));
+    await page.waitForFunction(() => /** @type {any} */ (window).root.querySelector('.box').getBoundingClientRect().y === -12, null, { timeout: 5000 });
+    assert.equal(await page.evaluate(() => {
+      const now = [.../** @type {any} */ (window).root.querySelectorAll('.box')];
+      return now.length === 2 && now.every((box, index) => box === /** @type {any} */ (window).firstBoxes[index]);
+    }), true);
+    const reasons = await page.evaluate(async () => {
+      const { highlight } = /** @type {any} */ (window);
+      const one = [document.getElementById('one')];
+      highlight.show(one); // replaced
+      highlight.clear(); // asked
+      highlight.clear(); // nothing shown: not told again
+      highlight.show(one);
+      dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      highlight.show(one);
+      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      return { reasons: /** @type {any} */ (window).reasons, boxes: /** @type {any} */ (window).root.querySelectorAll('.box').length };
+    });
+    assert.deepEqual(reasons, { reasons: ['replaced', 'asked', 'escape', 'pagehide'], boxes: 0 });
     await page.close();
   });
 

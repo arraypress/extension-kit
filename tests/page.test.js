@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { RUNTIME_ENTRIES } from '../src/build/index.js';
 import {
-  callInPage, callInTab, counted, iconButton, noticeCard, importAndCall, isBrowserPage, make, openSidePanel, pageOverlay, sidePanelPath, spriteIcon,
+  callInPage, callInTab, counted, createShowOnPage, iconButton, noticeCard, importAndCall, isBrowserPage, make, openSidePanel, pageOverlay, sidePanelPath, spriteIcon,
 } from '../src/index.js';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
@@ -54,6 +54,28 @@ describe('callInPage', () => {
     };
     await assert.rejects(callInPage(scripting, { tabId: 1 }, 'content/main.js', 'scan', [], { immediately: false }), /Cannot access/);
     assert.deepEqual(immediately, [false]);
+  });
+
+  it('a frame where the module doesn’t load or the function throws says why (Chrome alone gives a bare null)', async () => {
+    globals.chrome = { runtime: { getURL: (/** @type {string} */ path) => new URL(path, FIXTURES).href } };
+    const scripting = {
+      executeScript: async (/** @type {any} */ injection) => [{ frameId: 0, documentId: 'd', result: await injection.func(...injection.args) }],
+    };
+    const [thrown] = await callInPage(scripting, { tabId: 1 }, 'page-module.js', 'missing');
+    assert.equal(thrown.result, null);
+    assert.match(String(thrown.error), /not a function/);
+    const [unloaded] = await callInPage(scripting, { tabId: 1 }, 'no-such-module.js', 'echo');
+    assert.equal(unloaded.result, null);
+    assert.equal(typeof unloaded.error, 'string');
+    const [fine] = await callInPage(scripting, { tabId: 1 }, 'page-module.js', 'echo', ['x']);
+    assert.equal('error' in fine, false);
+  });
+
+  it('timeoutMs: a call no frame answers in time rejects with a TimeoutError; one answered in time is unchanged', async () => {
+    const never = { executeScript: () => new Promise(() => {}) };
+    await assert.rejects(callInPage(/** @type {any} */ (never), { tabId: 1 }, 'm.js', 'f', [], { timeoutMs: 20 }), { name: 'TimeoutError' });
+    const quick = { executeScript: async () => /** @type {any} */ ([{ frameId: 0, result: 'a' }]) };
+    assert.deepEqual(await callInPage(quick, { tabId: 1 }, 'm.js', 'f', [], { timeoutMs: 20 }), [{ frameId: 0, result: 'a' }]);
   });
 
   it('is in the runtime half', () => {
@@ -171,6 +193,91 @@ describe('callInTab', () => {
     assert.deepEqual(await callInTab(edges({ tabError: true }), 1, 'm.js', 'f'), { state: 'no-access' });
     assert.deepEqual(await callInTab(edges({ refusal: 'Cannot access contents of the page. Extension manifest must request permission to access the respective host.' }), 1, 'm.js', 'f'), { state: 'no-access' });
     assert.deepEqual(await callInTab(edges({ frames: [{ frameId: 0, result: undefined }] }), 1, 'm.js', 'f'), { state: 'no-access' });
+  });
+});
+
+describe('callInTab, when the page’s side goes wrong', () => {
+  it('failed: no frame answered and the call threw in one, with the top-most frame’s reason', async () => {
+    const failing = (/** @type {unknown[]} */ results) => ({
+      tabs: { get: async () => /** @type {chrome.tabs.Tab} */ ({ url: 'https://example.com/' }) },
+      scripting: { executeScript: async () => /** @type {any} */ (results.map((result, index) => ({ frameId: index * 3, result }))) },
+    });
+    assert.deepEqual(await callInTab(failing([null, { 'extension-kit:call-failed': 'in a frame' }, { 'extension-kit:call-failed': 'later' }]), 1, 'm.js', 'f'),
+      { state: 'failed', error: 'in a frame' });
+    // A frame that did answer is what's read; the failed one is left out.
+    assert.deepEqual(await callInTab(failing([{ 'extension-kit:call-failed': 'top' }, 'ok']), 1, 'm.js', 'f'), { state: 'read', frames: [{ frameId: 3, result: 'ok' }] });
+  });
+
+  it('timeout: a frame that never answers no longer keeps the caller waiting for ever', async () => {
+    const stuck = {
+      tabs: { get: async () => /** @type {chrome.tabs.Tab} */ ({ url: 'https://example.com/' }) },
+      scripting: { executeScript: () => /** @type {Promise<any>} */ (new Promise(() => {})) },
+    };
+    assert.deepEqual(await callInTab(stuck, 1, 'm.js', 'f', [], { timeoutMs: 20 }), { state: 'timeout' });
+  });
+});
+
+describe('createShowOnPage', () => {
+  /** A panel's controller over a page that records what it was asked to box. */
+  const panel = () => {
+    /** @type {unknown[][]} */
+    const page = [];
+    /** @type {(string | null)[]} */
+    const heard = [];
+    const state = { fail: false };
+    const onPage = createShowOnPage({
+      show: async (ids, frame) => { page.push([ids, frame]); if (state.fail) throw new Error('No tab'); },
+      onChange: (shown) => heard.push(shown),
+    });
+    return { onPage, page, heard, state };
+  };
+
+  it('a click shows an item, another item replaces it, the same item again takes it away', async () => {
+    const { onPage, page, heard } = panel();
+    await onPage.toggle('inter', ['inter'], 4);
+    assert.equal(onPage.shown(), 'inter');
+    await onPage.toggle('blue', ['blue-1', 'blue-2']);
+    await onPage.toggle('blue', ['blue-1', 'blue-2']);
+    assert.equal(onPage.shown(), null);
+    assert.deepEqual(page, [[['inter'], 4], [['blue-1', 'blue-2'], undefined], [null, undefined]]);
+    assert.deepEqual(heard, ['inter', 'blue', null]);
+  });
+
+  it('a rescan (or the panel closing) clears the page’s boxes, at once, and only if any are shown', async () => {
+    const { onPage, page, heard } = panel();
+    await onPage.reset();
+    assert.deepEqual(page, []);
+    await onPage.toggle('inter', ['inter']);
+    const resetting = onPage.reset();
+    assert.deepEqual(page.at(-1), [null, undefined]); // Sent before anything is awaited: a closing panel gets it out.
+    assert.equal(onPage.shown(), null);
+    await resetting;
+    assert.deepEqual(heard, ['inter', null]);
+  });
+
+  it('the page cleared its own boxes (Esc there): the button is released and the page isn’t called', async () => {
+    const { onPage, page, heard } = panel();
+    await onPage.toggle('inter', ['inter']);
+    onPage.cleared();
+    onPage.cleared();
+    assert.equal(onPage.shown(), null);
+    assert.deepEqual(heard, ['inter', null]);
+    assert.equal(page.length, 1);
+    await onPage.toggle('inter', ['inter']); // Shows again, not “takes away”.
+    assert.deepEqual(page.at(-1), [['inter'], undefined]);
+  });
+
+  it('a page that can’t be reached: nothing stays shown, the click’s failure reaches the caller, a reset’s doesn’t', async () => {
+    const { onPage, heard, state } = panel();
+    state.fail = true;
+    await assert.rejects(onPage.toggle('inter', ['inter']), /No tab/);
+    assert.equal(onPage.shown(), null);
+    assert.deepEqual(heard, ['inter', null]);
+    state.fail = false;
+    await onPage.toggle('inter', ['inter']);
+    state.fail = true;
+    await onPage.reset();
+    assert.equal(onPage.shown(), null);
   });
 });
 

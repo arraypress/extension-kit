@@ -14,6 +14,7 @@
  * @property {HTMLElement} host The host element, on the page's root element.
  * @property {ShadowRoot} root Its closed shadow root, the styles first: append to it.
  * @property {() => void} remove Take it off the page.
+ * @property {() => void} raise With `topLayer`: put it over whatever entered the top layer since.
  */
 
 /**
@@ -25,10 +26,18 @@
  * with `!important` after the reset. `css` styles what's inside (and `:host` custom properties,
  * which the reset doesn't touch).
  *
+ * With `topLayer` the host is a manual popover, shown: it draws in the top layer, over the page's
+ * modal dialogs, popovers and fullscreen element, which no `z-index` reaches. The top layer
+ * paints in the order things entered it, so the overlay goes back on top (`raise`) whenever the
+ * page opens a dialog or a popover or goes fullscreen after it. What a modal dialog makes inert
+ * stays inert, the overlay with it: it shows over the dialog, but can't be clicked while the
+ * dialog is open.
+ *
  * @param {Document} doc - The page.
- * @param {{name: string, css: string, hostStyle?: Record<string, string>}} options - `name`: the
- *   host's element name, with a hyphen (never registered: a plain element); `css`: the overlay's
- *   styles; `hostStyle`: the host's own styles by CSS property name (`'z-index'`), each `!important`.
+ * @param {{name: string, css: string, hostStyle?: Record<string, string>, topLayer?: boolean}} options -
+ *   `name`: the host's element name, with a hyphen (never registered: a plain element); `css`: the
+ *   overlay's styles; `hostStyle`: the host's own styles by CSS property name (`'z-index'`), each
+ *   `!important`; `topLayer`: draw over the page's dialogs and fullscreen element. Default false.
  * @returns {PageOverlay} The overlay.
  * @example
  * const { root, remove } = pageOverlay(document, {
@@ -38,7 +47,7 @@
  * });
  * root.append(card);
  */
-export function pageOverlay(doc, { name, css, hostStyle = {} }) {
+export function pageOverlay(doc, { name, css, hostStyle = {}, topLayer = false }) {
   for (const old of doc.querySelectorAll(name)) old.remove();
   const host = doc.createElement(name);
   host.style.setProperty('all', 'initial', 'important');
@@ -48,5 +57,32 @@ export function pageOverlay(doc, { name, css, hostStyle = {} }) {
   style.textContent = css;
   root.append(style);
   doc.documentElement.append(host);
-  return { host, root, remove: () => host.remove() };
+  if (!topLayer || typeof host.showPopover !== 'function') return { host, root, remove: () => host.remove(), raise: () => {} };
+
+  host.popover = 'manual';
+  const raise = () => {
+    if (!host.isConnected) return;
+    host.hidePopover();
+    host.showPopover();
+  };
+  /** Something of the page's entered the top layer: a dialog or popover opened, or the page went fullscreen. */
+  const entered = (/** @type {Event} */ event) => {
+    if (event.target === host) return;
+    if (event.type === 'toggle' && /** @type {ToggleEvent} */ (event).newState !== 'open') return;
+    raise();
+  };
+  const view = doc.defaultView;
+  view?.addEventListener('toggle', entered, true);
+  view?.addEventListener('fullscreenchange', entered, true);
+  host.showPopover();
+  return {
+    host,
+    root,
+    raise,
+    remove() {
+      view?.removeEventListener('toggle', entered, true);
+      view?.removeEventListener('fullscreenchange', entered, true);
+      host.remove();
+    },
+  };
 }

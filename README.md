@@ -253,7 +253,7 @@ chrome.action.onClicked.addListener((tab) => openSidePanel(chrome.sidePanel, tab
 // In the panel: every frame of the tab, or why it can't be read.
 const reading = await callInTab(chrome, tabId, 'content/main.js', 'scan');
 if (reading.state === 'read') show(reading.frames); // top frame first
-else showMessage(reading.state);                   // 'browser' (Chrome's own page) or 'no-access'
+else showMessage(reading.state);                   // 'browser' (Chrome's own page), 'no-access', 'failed' or 'timeout'
 
 // In the content script: a layer the page's styles can't touch (a closed shadow root). The host's
 // own styles go in hostStyle: its inline `all: initial !important` reset beats a `:host` rule.
@@ -264,8 +264,18 @@ const { root, remove } = pageOverlay(document, {
 });
 
 // “Show on page”: boxes in DevTools' blue, kept on the elements as the page scrolls; Esc clears.
-const highlight = createHighlighter(document, { root: () => root });
+// onClear says why they went, so the panel hears of the ones it didn't ask for.
+const highlight = createHighlighter(document, {
+  root: () => root,
+  onClear: (reason) => { if (reason === 'escape' || reason === 'pagehide') chrome.runtime.sendMessage({ type: 'boxes-cleared' }); },
+});
 highlight.show(elements, { reveal: true });
+
+// In the panel: which item is shown, whatever ends it.
+const onPage = createShowOnPage({ show: (ids, frame) => callPage('highlight', [ids, frame]), onChange: press });
+button.addEventListener('click', () => onPage.toggle(font.id, [font.id], font.frameId));
+chrome.runtime.onMessage.addListener((message) => { if (message.type === 'boxes-cleared') onPage.cleared(); });
+addEventListener('pagehide', () => onPage.reset()); // and `await onPage.reset()` before a rescan
 ```
 
 A page can load a web-accessible module by the extension's address, and so tell the extension
@@ -283,14 +293,20 @@ panel to `path?tab=<id>` (`sidePanelPath`) and opens it in the same moment: Chro
 only while the click counts. `callInTab(edges, tabId, module, name, args)` calls it in every frame
 and gives `{state: 'read', frames}` (frames that answered, top first), or `{state: 'browser'}` for
 a page Chrome keeps to itself (`isBrowserPage(url)`: its own pages, the Web Store) or
-`{state: 'no-access'}` (the tab went to another site since the click). `pageOverlay` puts a host
+`{state: 'no-access'}` (the tab went to another site since the click), `{state: 'failed', error}`
+(the page module didn't load or threw in every frame; Chrome alone reports that as null) or, with
+`{timeoutMs}`, `{state: 'timeout'}` (Chrome answers only once every frame has). `pageOverlay` puts a host
 element of its own name on the root element, replacing one a run before left; `root` is its closed
 shadow root, `css` first. The host is reset inline (`all: initial !important`) so the page can't
 move or hide it; that also beats a `:host { … }` rule and `host.style.x = …`, so the host's own
-styles go in `hostStyle` (set `!important` after the reset). `createHighlighter(doc, {root, onClear,
+styles go in `hostStyle` (set `!important` after the reset). `topLayer: true` makes the host a
+manual popover, drawn over the page's modal dialogs and fullscreen element and put back on top
+(`raise()`) when the page opens one after it; a modal dialog still makes it inert, so it shows but
+can't be clicked while the dialog is open. `createHighlighter(doc, {root, onClear,
 max})` boxes up to 500 elements (`MAX_BOXES`) in the overlay (`HIGHLIGHT_CSS` styles them), only
-those in the window, following the page as it scrolls; `show` replaces the set, `clear` or Esc
-ends it.
+those in the window, following the page as it scrolls; `show` replaces the set, `clear`, Esc or
+leaving the page ends it, and `onClear(reason)` hears which (`'replaced'`, `'asked'`, `'escape'`,
+`'pagehide'`). `createShowOnPage({show, onChange})` is the panel's side: `toggle`, `reset`, `cleared`.
 
 ```js
 // A page's elements in a line, and copying from a click (the copy command where the API can't).
