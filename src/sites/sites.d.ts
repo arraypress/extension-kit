@@ -7,7 +7,11 @@
  * taken out or edited. Pure.
  *
  * A site is a web host: http or https, with a dot in its name (or
- * `localhost`). Text without a scheme is read as https.
+ * `localhost`). Text without a scheme is read as https. Only a real host
+ * name is a site: a `*` typed inside one would make a match pattern Chrome
+ * refuses (`*://*.*.example.com/*`), and with it the whole
+ * `registerContentScripts` call, so the extension would stop following its
+ * settings (checked in Chromium 156: "Invalid host wildcard").
  *
  * @module sites/sites
  */
@@ -35,6 +39,7 @@ export declare function siteOrigin(input: unknown): string | null;
  * @example
  * siteHost(' https://www.GitHub.com/a ');  // 'github.com'
  * siteHost('news.bbc.co.uk');              // 'news.bbc.co.uk'
+ * siteHost('*.example.com');               // 'example.com': a list covers subdomains anyway
  * siteHost('not a site');                  // null
  */
 export declare function siteHost(input: unknown): string | null;

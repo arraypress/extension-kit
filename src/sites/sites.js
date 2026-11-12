@@ -7,7 +7,11 @@
  * taken out or edited. Pure.
  *
  * A site is a web host: http or https, with a dot in its name (or
- * `localhost`). Text without a scheme is read as https.
+ * `localhost`). Text without a scheme is read as https. Only a real host
+ * name is a site: a `*` typed inside one would make a match pattern Chrome
+ * refuses (`*://*.*.example.com/*`), and with it the whole
+ * `registerContentScripts` call, so the extension would stop following its
+ * settings (checked in Chromium 156: "Invalid host wildcard").
  *
  * @module sites/sites
  */
@@ -18,19 +22,31 @@ export const MAX_HOST_LENGTH = 253;
 /** A scheme at the start of what was typed; `localhost:8080` is a host and port, not one. */
 const SCHEME = /^[a-z][a-z\d+.-]*:(?!\d)/i;
 
+/** A match pattern's wildcards at the start of what was typed: `*://` for any scheme, `*.` for subdomains. A listed site covers its subdomains anyway. */
+const PATTERN_START = /^(?:\*:\/\/)?((?:[a-z][a-z\d+.-]*:\/\/)?)\*\./i;
+
 /**
- * What was typed (or stored, or a page's address) as a web URL.
+ * A host name as the URL parser gives it (lower case, punycode), and nothing else it lets through:
+ * labels of letters, digits, `-` and `_`, none empty, a dot at the end allowed. `*`, commas and
+ * empty labels pass the parser, and a `*` goes on to make a match pattern Chrome refuses.
+ */
+const HOST_NAME = /^[a-z\d_](?:[a-z\d_-]*[a-z\d_])?(?:\.[a-z\d_](?:[a-z\d_-]*[a-z\d_])?)*\.?$/;
+
+/**
+ * What was typed (or stored, or a page's address) as a web URL. A match pattern's wildcards at
+ * the start (`*.example.com`, `*://*.example.com/*`) are dropped: the site is `example.com`.
  *
  * @param {unknown} input - Anything.
  * @returns {URL | null} The URL, or null when it isn't a web site's.
  */
 function webUrl(input) {
   // Only text: a stray number would otherwise read as an IP address (3 → "0.0.0.3").
-  const text = typeof input === 'string' ? input.trim() : '';
+  const text = typeof input === 'string' ? input.trim().replace(PATTERN_START, '$1').replace(/^\*:\/\//, '') : '';
   if (!text || /\s/.test(text)) return null;
   try {
     const url = new URL(SCHEME.test(text) ? text : `https://${text}`);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    if (!HOST_NAME.test(url.hostname)) return null;
     return url.hostname.includes('.') || url.hostname === 'localhost' ? url : null;
   } catch {
     return null;
@@ -63,6 +79,7 @@ export function siteOrigin(input) {
  * @example
  * siteHost(' https://www.GitHub.com/a ');  // 'github.com'
  * siteHost('news.bbc.co.uk');              // 'news.bbc.co.uk'
+ * siteHost('*.example.com');               // 'example.com': a list covers subdomains anyway
  * siteHost('not a site');                  // null
  */
 export function siteHost(input) {

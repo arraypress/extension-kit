@@ -47,6 +47,27 @@ describe('sites', () => {
     }
   });
 
+  it('a match pattern typed as a site is its host: the list covers subdomains anyway', () => {
+    assert.equal(siteHost('*.example.com'), 'example.com');
+    assert.equal(siteHost('https://*.example.com/shop'), 'example.com');
+    assert.equal(siteHost('*://*.example.com/*'), 'example.com');
+    assert.equal(siteHost('*://example.com/*'), 'example.com');
+    assert.equal(siteOrigin('*.example.com'), 'https://example.com');
+    assert.deepEqual(hostPatterns(/** @type {string} */ (siteHost('*.example.com'))), ['*://example.com/*', '*://*.example.com/*']);
+  });
+
+  it('only a real host name is a site: no wildcard inside, stray punctuation or empty label', () => {
+    for (const typed of ['*', '*.com.*', 'www.*.example.com', 'exam*ple.com', 'example.com,', 'a..b', '.com', 'exa mple.com', '[::1]']) {
+      assert.equal(siteHost(typed), null, typed);
+      assert.equal(siteOrigin(typed), null, typed);
+    }
+    assert.equal(siteHost('my_site.example.com'), 'my_site.example.com');
+    assert.equal(siteHost('xn--bcher-kva.de'), 'xn--bcher-kva.de');
+    assert.equal(siteHost('bücher.de'), 'xn--bcher-kva.de');
+    assert.equal(siteHost('127.0.0.1:8080'), '127.0.0.1');
+    assert.equal(siteHost('Example.COM.'), 'example.com');
+  });
+
   it('onSite: a listed host covers its subdomains, and nothing that merely ends the same', () => {
     assert.equal(onSite('docs.github.com', ['github.com']), true);
     assert.equal(onSite('github.com', ['github.com']), true);
