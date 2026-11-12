@@ -25,7 +25,7 @@ export { pageOverlay } from './content/overlay.js';
 export { PAGE_TOAST_MS, showPageToast } from './content/page-toast.js';
 export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { copyFormats } from './dom/copy.js';
-export { focusedElement } from './dom/focus.js';
+export { focusedElement, focusedIn } from './dom/focus.js';
 export { iconButton, make, spriteIcon } from './dom/make.js';
 export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
 export { counted, localize, translator } from './dom/i18n.js';

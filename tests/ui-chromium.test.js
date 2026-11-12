@@ -656,6 +656,47 @@ describe('toast (Chromium)', () => {
   });
 });
 
+describe('the stylesheet on a right-to-left page (Chromium)', () => {
+  /** @param {'ltr' | 'rtl'} dir */
+  const measured = async (dir) => {
+    const page = await open();
+    const result = await page.evaluate((direction) => {
+      const { kit } = /** @type {PageGlobals} */ (/** @type {unknown} */ (window));
+      document.documentElement.dir = direction;
+      document.body.insertAdjacentHTML('beforeend', '<select id="pick"><option>One</option></select><input id="switch" type="checkbox" class="switch" role="switch" checked><a class="nav-item" id="nav">Item</a>');
+      const toast = kit.createToast();
+      toast.show('Saved');
+      const box = toast.element.getBoundingClientRect();
+      const pick = getComputedStyle(/** @type {Element} */ (document.getElementById('pick')));
+      const knob = getComputedStyle(/** @type {Element} */ (document.getElementById('switch')), '::after');
+      const nav = getComputedStyle(/** @type {Element} */ (document.getElementById('nav')));
+      return {
+        toast: [Math.round(box.left), Math.round(innerWidth - box.right)],
+        select: [pick.paddingLeft, pick.paddingRight, pick.backgroundPositionX],
+        knob: [knob.left, knob.right, knob.transform],
+        nav: [nav.borderTopLeftRadius, nav.borderTopRightRadius, nav.paddingLeft, nav.paddingRight],
+      };
+    }, dir);
+    await page.close();
+    return result;
+  };
+
+  it('left to right is as it was; right to left mirrors the toast, a select’s arrow, the switch’s knob and the menu’s pill', async () => {
+    const ltr = await measured('ltr');
+    assert.equal(ltr.toast[0], 24);
+    assert.deepEqual(ltr.select, ['10px', '20px', 'calc(100% - 10px)']);
+    assert.deepEqual(ltr.knob.slice(0, 1), ['17px']);
+    assert.deepEqual(ltr.nav, ['0px', '100px', '23px', '16px']);
+
+    const rtl = await measured('rtl');
+    assert.equal(rtl.toast[1], 24, 'the toast is at the start: bottom right');
+    assert.deepEqual(rtl.select, ['20px', '10px', '10px']);
+    assert.equal(rtl.knob[1], '17px');
+    assert.notEqual(rtl.knob[2], ltr.knob[2], 'centred on its point from the other side');
+    assert.deepEqual(rtl.nav, ['100px', '0px', '16px', '23px']);
+  });
+});
+
 describe('site list with an Add button (Chromium)', () => {
   /**
    * A fresh page with a Memory Saver–style site list: an Add button, the dialog, ⋮ menus.

@@ -506,7 +506,10 @@ It opens modally over its button, as Chrome's does (its top at the button's top,
 button's end), moved to stay 8px inside the window. A click outside, Esc, Tab or the window losing
 focus closes it; ↑/↓ (wrapping, past disabled items), Home and End move; focus goes back to the
 button (or `focusTo`); an item runs once the menu has closed. `createMenu({id, placement: 'below'})`
-opens it below the button instead. `menuPosition` and `isInside` are the pure geometry.
+opens it below the button instead. `menuPosition` and `isInside` are the pure geometry. In a
+content script, give it the overlay's shadow root (`createMenu({root})`, a closed one too): the
+keys it handles don't reach the page's own shortcuts, and `destroy()` takes it off the page with
+its window listener. On a right-to-left page it lines up with its button's other edge.
 
 `moreActionsButton(name, options)` is the 32px ⋮ icon button, labelled "More actions for “name”"
 (`label` for a translation), with `aria-haspopup="menu"`; its icon is the stylesheet's
@@ -676,6 +679,10 @@ except those listed, each with a reason:
 | `filesUnder`, `zipEntries`, `missingReferences`, `manifestReferences` | For a packaging test: the zip is the folder, and every path the extension names is a file the zip holds (one left out of the zip is as missing as one that isn't there): imports (`from`, `import()`, a bare `import './x.js'`), `getURL`, `src`/`href`, a stylesheet's `url()` and `@import`, and the manifest's worker, pages, icons, content scripts, default locale's messages, rule files and web-accessible resources. A `#fragment` or `?query` is ignored (`referencedPath`). |
 
 ## Stylesheet classes
+
+The stylesheet uses logical properties (and mirrors the few things that need it: a select's arrow,
+the switch's knob, the link-row arrow, the drawer), so a page with `dir="rtl"` reads as Chrome's
+own pages do in a right-to-left language.
 
 | Piece | Markup |
 |---|---|

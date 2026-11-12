@@ -307,7 +307,7 @@ button.link:hover { background: none; text-decoration: underline; }
 
 /* settings-subpage's header, at the top of its card: the back button, then the subpage's title.
    <div class="subpage-head"><button class="icon-button" aria-label="Back"><span class="icon icon-arrow-back"></span></button><h2>Cookies</h2></div> */
-.subpage-head { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 0 20px 0 8px; }
+.subpage-head { display: flex; align-items: center; gap: 8px; min-height: 56px; padding-inline: 8px 20px; }
 .subpage-head h2 { margin: 0; font-size: 15px; font-weight: 400; color: var(--text); overflow-wrap: anywhere; }
 .subpage-head .icon-button { color: var(--icon-muted); }
 
@@ -323,12 +323,16 @@ select {
     width: 200px;
     max-width: 100%;
     height: 36px;
-    padding: 0 20px 0 10px;
+    padding-block: 0;
+    padding-inline: 10px 20px;
     border: 1px solid var(--field-border);
     border-radius: var(--radius);
     background: var(--select-arrow) calc(100% - 10px) center / 7px no-repeat transparent;
     cursor: pointer;
 }
+
+/* Right to left: the arrow at the other end, as Chrome mirrors its own. */
+select:dir(rtl) { background-position: 10px center; }
 
 select:hover { background-color: var(--hover-subtle); }
 select:focus-visible { outline: 2px solid var(--primary); outline-offset: -1px; }
@@ -414,13 +418,13 @@ input.switch::after {
     content: "";
     position: absolute;
     top: 50%;
-    left: 7px;
+    inset-inline-start: 7px;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: var(--switch-outline-off);
     transform: translate(-50%, -50%);
-    transition: left 80ms linear, width 80ms linear, height 80ms linear, background-color 80ms linear;
+    transition: inset-inline-start 80ms linear, width 80ms linear, height 80ms linear, background-color 80ms linear;
 }
 
 /* The 20px hover halo around the knob. */
@@ -428,7 +432,7 @@ input.switch:hover::before {
     content: "";
     position: absolute;
     top: 50%;
-    left: 7px;
+    inset-inline-start: 7px;
     width: 20px;
     height: 20px;
     border-radius: 50%;
@@ -438,8 +442,10 @@ input.switch:hover::before {
 
 input.switch:active::after { width: 10px; height: 10px; }
 input.switch:checked { background: var(--primary); border-color: var(--primary); }
-input.switch:checked::after { left: 17px; width: 12px; height: 12px; background: var(--on-primary); }
-input.switch:checked:hover::before { left: 17px; }
+input.switch:checked::after { inset-inline-start: 17px; width: 12px; height: 12px; background: var(--on-primary); }
+input.switch:checked:hover::before { inset-inline-start: 17px; }
+/* Right to left: the knob is measured from the right, so it's centred on its point the other way. */
+input.switch:dir(rtl)::after, input.switch:dir(rtl):hover::before { transform: translate(50%, -50%); }
 input.switch:checked:active::after { width: 14px; height: 14px; }
 input.switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 input.switch:disabled { opacity: 0.38; cursor: default; }
@@ -458,10 +464,10 @@ input.switch:disabled::before { display: none; }
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--sidebar-width);
     align-items: center;
     height: var(--toolbar-height);
-    padding-right: 12px;
+    padding-inline-end: 12px;
 }
 
-.toolbar-start { display: flex; align-items: center; gap: 12px; padding-left: 20px; min-width: 0; }
+.toolbar-start { display: flex; align-items: center; gap: 12px; padding-inline-start: 20px; min-width: 0; }
 .toolbar-start h1, .toolbar > h1 {
     font-size: 22px;
     font-weight: 500;
@@ -481,7 +487,8 @@ input.switch:disabled::before { display: none; }
     width: 100%;
     max-width: 680px;
     height: 36px;
-    padding: 0 6px 0 10px;
+    padding-block: 0;
+    padding-inline: 10px 6px;
     border-radius: 100px;
     background: var(--search-bg);
     color: var(--icon);
@@ -496,7 +503,8 @@ input.switch:disabled::before { display: none; }
     min-width: 0;
     height: 100%;
     min-height: 0;
-    padding: 0 0 0 4px;
+    padding: 0;
+    padding-inline-start: 4px;
     border: 0;
     border-radius: 0;
     background: none;
@@ -621,10 +629,12 @@ label.row, .row[actionable] { cursor: pointer; }
     flex: none;
     width: 20px;
     height: 20px;
-    margin-right: -2px;
+    margin-inline-end: -2px;
     background: var(--icon-muted);
     mask: var(--icon-arrow-right) center / 20px no-repeat;
 }
+
+.link-row:dir(rtl)::after { transform: scaleX(-1); }
 
 .link-row.external::after { mask-image: var(--icon-open-in-new); }
 
@@ -653,9 +663,13 @@ label.row, .row[actionable] { cursor: pointer; }
     align-items: center;
     gap: 20px;
     min-height: 40px;
-    margin: 0 2px 0 1px;
-    padding: 10px 16px 10px 23px;
-    border-radius: 0 100px 100px 0;
+    margin-block: 0;
+    margin-inline: 1px 2px;
+    padding-block: 10px;
+    padding-inline: 23px 16px;
+    border-radius: 0;
+    border-start-end-radius: 100px;
+    border-end-end-radius: 100px;
     color: var(--text);
     font-size: 14px;
     font-weight: 500;
@@ -678,7 +692,7 @@ label.row, .row[actionable] { cursor: pointer; }
 .manager { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
 .sidebar { overflow: auto; padding: 8px 0 24px; }
-.main { overflow: auto; padding: 24px 32px 96px 17px; min-width: 0; }
+.main { overflow: auto; padding-block: 24px 96px; padding-inline: 17px 32px; min-width: 0; }
 
 /* A folder in the sidebar (bookmarks-folder-node): the same pill as the settings menu. */
 .tree { list-style: none; margin: 0; padding: 0; }
@@ -689,9 +703,13 @@ label.row, .row[actionable] { cursor: pointer; }
     align-items: center;
     gap: 8px;
     min-height: 40px;
-    margin: 0 3px 0 1px;
-    padding: 0 4px 0 calc(8px + var(--depth) * 20px);
-    border-radius: 0 100px 100px 0;
+    margin-block: 0;
+    margin-inline: 1px 3px;
+    padding-block: 0;
+    padding-inline: calc(8px + var(--depth) * 20px) 4px;
+    border-radius: 0;
+    border-start-end-radius: 100px;
+    border-end-end-radius: 100px;
     color: var(--folder-text);
     font-size: 14px;
     font-weight: 500;
@@ -724,7 +742,8 @@ label.row, .row[actionable] { cursor: pointer; }
     align-items: center;
     gap: 20px;
     height: 40px;
-    padding: 0 8px 0 20px;
+    padding-block: 0;
+    padding-inline: 20px 8px;
     user-select: none;
 }
 
@@ -798,7 +817,8 @@ label.row, .row[actionable] { cursor: pointer; }
    `hidden`: the popover defaults undone either way. */
 .toast {
     position: fixed;
-    inset: auto auto 0 0;
+    inset-block: auto 0;
+    inset-inline: 0 auto;
     display: flex;
     align-items: center;
     gap: 32px;
@@ -822,7 +842,7 @@ label.row, .row[actionable] { cursor: pointer; }
 
 .toast button {
     height: auto;
-    margin-right: -8px;
+    margin-inline-end: -8px;
     padding: 8px;
     border: 0;
     background: none;
@@ -836,7 +856,8 @@ label.row, .row[actionable] { cursor: pointer; }
 
 .drawer {
     position: fixed;
-    inset: 0 auto 0 0;
+    inset-block: 0;
+    inset-inline: 0 auto;
     width: 256px;
     max-width: calc(100vw - 56px);
     height: 100%;
@@ -851,9 +872,11 @@ label.row, .row[actionable] { cursor: pointer; }
 
 .drawer[open] { animation: cr-drawer-in 200ms ease; }
 .drawer::backdrop { background: rgb(0 0 0 / 0.5); }
-.drawer-head { display: flex; align-items: center; gap: 12px; height: var(--toolbar-height); padding-left: 24px; font-size: 22px; font-weight: 500; letter-spacing: 0.25px; }
+.drawer-head { display: flex; align-items: center; gap: 12px; height: var(--toolbar-height); padding-inline-start: 24px; font-size: 22px; font-weight: 500; letter-spacing: 0.25px; }
 
 @keyframes cr-drawer-in { from { transform: translateX(-100%); } }
+@keyframes cr-drawer-in-rtl { from { transform: translateX(100%); } }
+.drawer[open]:dir(rtl) { animation-name: cr-drawer-in-rtl; }
 
 @media (prefers-reduced-motion: reduce) {
     .drawer[open] { animation: none; }
@@ -942,7 +965,8 @@ label.row, .row[actionable] { cursor: pointer; }
 
 /* .sp-card: rows on a 12px-rounded card, 8px from the panel's edge. */
 .sp-card {
-    margin: 0 0 0 8px;
+    margin: 0;
+    margin-inline-start: 8px;
     padding: 8px 0;
     border-radius: 12px;
     background: var(--sp-card);
@@ -1027,7 +1051,7 @@ label.row, .row[actionable] { cursor: pointer; }
     place-items: center;
     width: 40px;
     height: 40px;
-    margin-right: 16px;
+    margin-inline-end: 16px;
     border-radius: 8px;
     background: var(--sp-icon-bg);
     color: var(--text-secondary);
@@ -1057,7 +1081,8 @@ label.row, .row[actionable] { cursor: pointer; }
     display: none;
     align-items: center;
     gap: 4px;
-    margin: 0 -4px 0 8px;
+    margin-block: 0;
+    margin-inline: 8px -4px;
 }
 
 .sp-item:is(:hover, :focus-within) .sp-suffix,
@@ -1096,7 +1121,8 @@ button.floating {
     align-items: center;
     gap: 8px;
     height: 40px;
-    padding: 8px 16px 8px 12px;
+    padding-block: 8px;
+    padding-inline: 12px 16px;
     border: 0;
     border-radius: 8px;
     background: var(--tonal-bg);
@@ -1118,6 +1144,6 @@ button.floating .icon { width: 20px; height: 20px; }
 /* ------------------------------------------------------------ Narrow */
 
 @media (max-width: 720px) {
-    .toolbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding-right: 8px; }
-    .toolbar-start { padding-left: 16px; }
+    .toolbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding-inline-end: 8px; }
+    .toolbar-start { padding-inline-start: 16px; }
 }
