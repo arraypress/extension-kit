@@ -96,7 +96,11 @@ export async function extensionProfile(chromium, dir, { prefix = 'extension-', a
         ...options,
         args: [`--disable-extensions-except=${dir}`, `--load-extension=${dir}`, ...args],
       });
-      const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+      const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker', { timeout: 15_000 }).catch(async () => {
+        // Chrome refused the extension (a manifest or `_locales` error) or it has no worker: nothing to wait for.
+        await context.close();
+        throw new Error(`The extension at ${dir} didn't start a service worker: Chrome may have refused to load it (check its manifest and _locales at chrome://extensions)`);
+      });
       const extensionId = new URL(worker.url()).host;
       return {
         context,
@@ -214,10 +218,12 @@ export async function offscreenEmulator(cdp, suffix = '/offscreen/offscreen.html
 
 /**
  * Wrap the worker's real `chrome.action.setIcon` so each call is recorded once
- * Chrome has taken it (a path Chrome can't load fails, and isn't recorded).
+ * Chrome has taken it (a path Chrome can't load fails, and isn't recorded):
+ * its `path`, or `'imageData'` for an icon given as pixels. The record lives
+ * in the worker: it's gone when the worker restarts ({@link stopWorker}).
  *
  * @param {Worker} worker - The extension's service worker.
- * @returns {Promise<() => Promise<unknown[]>>} Reads the recorded `path`s, oldest first.
+ * @returns {Promise<() => Promise<unknown[]>>} Reads the recorded icons, oldest first.
  */
 export async function recordIconCalls(worker) {
   await worker.evaluate(() => {
@@ -226,7 +232,7 @@ export async function recordIconCalls(worker) {
     const real = chrome.action.setIcon.bind(chrome.action);
     chrome.action.setIcon = /** @type {typeof chrome.action.setIcon} */ (async (/** @type {chrome.action.TabIconDetails} */ details) => {
       await real(details);
-      calls.push(details.path);
+      calls.push(details.path ?? (details.imageData ? 'imageData' : undefined));
     });
   });
   return () => worker.evaluate(() => /** @type {{iconCalls: unknown[]}} */ (/** @type {unknown} */ (globalThis)).iconCalls);
@@ -245,7 +251,8 @@ export const CHECK_MS = 60_000;
  *   whether it passed.
  * @property {(name: string) => void} fail Count a failure found outside any check (a page's
  *   uncaught error, say): printed now, listed and counted at the end.
- * @property {() => void} finish Print the tally, and exit with 1 if anything failed.
+ * @property {() => void} finish Print the tally, and exit with 1 if anything failed or no check ran at all
+ *   (a script that returned early, or whose filter matched nothing, hasn't passed).
  */
 
 /**
@@ -288,6 +295,11 @@ export function checkRunner({ timeout: runnerTimeout = CHECK_MS } = {}) {
     },
     finish() {
       console.log(`\n${passed} passed, ${failures.length} failed`);
+      if (!passed && !failures.length) {
+        console.log('  No checks ran.');
+        process.exit(1);
+        return;
+      }
       if (!failures.length) return;
       for (const failure of failures) console.log(`  - ${failure}`);
       process.exit(1);

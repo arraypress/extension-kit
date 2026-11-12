@@ -74,9 +74,12 @@ Other libraries are copied the same way, by name (a path ending in `/` copies a 
 ```
 
 `npm install some-package` doesn't run the extension's own `postinstall`, so a copy can go stale
-without a word. Each copy is stamped with its package's version (`vendored.json`, left out of the
-zip), and `extension-kit vendor-check` fails, naming the copy, until `npm run postinstall` remakes
-it. From a script: `vendorPackage(name, files, dest)`, `checkVendored(dir)`.
+without a word. Each copy is stamped with its package's version, what was copied and a hash of it
+(`vendored.json`, left out of the zip), and `extension-kit vendor-check` fails, naming the copy,
+until `npm run postinstall` remakes it: a copy of another version, one edited by hand, one whose
+package's files changed under the same version (a library copied into `node_modules` to try it
+before it's published), or a vendor folder with no copies in it at all. A copy is never made into
+a folder that holds a `manifest.json`, a `package.json` or a `.git` (the folder is emptied first). From a script: `vendorPackage(name, files, dest)`, `checkVendored(dir)`.
 
 ### An extension with a bundler
 
@@ -626,16 +629,16 @@ except those listed, each with a reason:
 
 | Export | What it does |
 |---|---|
-| `fakeLanguageModel(state)` | A fake Prompt API (`LanguageModel`): `availability`, `create` (download progress, a cold start, `failDownload`), sessions that `clone`, answer (`answerMs`, `answer(prompt)`, `failPrompt`) and stop on their signal; `log` of what it was asked, `set` to change it. Browser-safe, so a test build can put it on `globalThis`. |
-| `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`: JSON copies, `onChanged` for real changes only, sync's 8,192-byte item quota, its 102,400 bytes in all (`SYNC_QUOTA_BYTES`) and 120 writes a minute. `settled()` waits for listeners. |
+| `fakeLanguageModel(state)` | A fake Prompt API (`LanguageModel`): `availability`, `create` (download progress, a cold start, `failDownload`), sessions that `clone`, answer (`answerMs`, `answer(prompt)`, `failPrompt`) and stop on their signal, a destroyed session that answers nothing more, a download refused without a click (`userActivation`); `log` of what it was asked, `set` to change it. Browser-safe, so a test build can put it on `globalThis`. |
+| `fakeChromeStorage({local, sync, session, now})` | In-memory `chrome.storage`, each point checked against Chromium: values as Chrome stores them (`undefined`, functions and `NaN` dropped, a `Date` is `{}`), `get` with a key, keys, defaults or nothing, `clear`, `getBytesInUse`, `onChanged` (the area's own too, `removeListener`) for real changes only, whatever order an object's keys come in. Sync's quotas with Chrome's own errors: 8,192 bytes an item counted as Chrome counts them (`syncItemBytes`), 102,400 bytes (`SYNC_QUOTA_BYTES`) and 512 items (`SYNC_MAX_ITEMS`) in all, 120 calls a minute and 1,800 an hour (`SYNC_WRITES_PER_MINUTE`, `SYNC_WRITES_PER_HOUR`) of each of `set`, `remove` and `clear`; local and session hold 10 MB (`LOCAL_QUOTA_BYTES`). `settled()` waits for listeners. |
 | `launchExtension(chromium, dir, options)` | Load an unpacked extension into a fresh profile; `{context, worker, extensionId, url(page), profile, close()}`. |
 | `launchDownloading(chromium, dir, options)`, `filesIn(dir)` | An extension in a browser that downloads for real: `{…launchExtension's, downloads}`, the profile's own Downloads folder (Playwright otherwise saves downloads under made-up names no extension sees); the files under a folder, downloads still running left out. |
 | `extensionProfile(chromium, dir, options)` | A profile to start the browser on more than once (a restart, a first start with a changed manifest): `{dir, launch(), remove()}`. |
 | `runChecks(runner, body, cleanUps)` | A script's checks: an error outside any check fails, the clean-ups always run (each within 30 s), then the tally. |
-| `messageLookup(extensionDir, locale)`, `readMessages(extensionDir, locale)` | `chrome.i18n.getMessage` over the real `_locales` (a locale over en, named placeholders filled), for unit tests. |
+| `messageLookup(extensionDir, locale)`, `readMessages(extensionDir, locale)` | `chrome.i18n.getMessage` over the real `_locales`, as Chromium answers: a locale over en, names in any case, named placeholders and `$1`–`$9` filled, `$$` a dollar sign; a message naming a placeholder it doesn't define throws (Chrome won't load that extension). For unit tests. |
 | `heartbeat(page)` | A timer beating in a page: `stop()` gives the longest the main thread was held (ms), for performance checks. |
-| `playPermissionPrompt(answers)` | Chrome's permission prompt played in a page (`page.evaluate` or `addInitScript`): each request recorded on `window.asked` with whether a click was behind it, answered from `answers`. |
-| `checkRunner({timeout})` | Named checks that report and go on: `check(name, fn, {timeout})`, `fail(name)` for an error found outside a check, `finish()`. A check that runs past its limit (`CHECK_MS`, 60 s) fails, and the run goes on. |
+| `playPermissionPrompt(answers)` | Chrome's permission prompt played in a page (`page.evaluate` or `addInitScript`): each request recorded on `window.asked` with whether a click was behind it, answered from `answers`; one with no click behind it is refused, as Chrome refuses it. |
+| `checkRunner({timeout})` | Named checks that report and go on: `check(name, fn, {timeout})`, `fail(name)` for an error found outside a check, `finish()` (exits 1 on a failure, or when no check ran at all). A check that runs past its limit (`CHECK_MS`, 60 s) fails, and the run goes on. |
 | `eachLimited(items, limit, work)` | Work through a list at most `limit` at once, `work(item, slot, index)` (also in the main entry). |
 | `realisticBrowser(options)`, `chromeUserAgent(browser)` | Launch options and a user agent for a browser that doesn't say it's automated, for live checks. |
 | `closeOnSignal(close)` | On Ctrl-C or a kill, close the run's browsers, then exit. |
@@ -652,9 +655,9 @@ except those listed, each with a reason:
 | `warningsAddedBy(worker, manifest, names)` | `{warnings, without, added}`: the warnings with and without some permissions, and those only they bring (`withoutPermissions` is the pure part). |
 | `savedTabGroups(profile)` | Chrome's saved tab groups (`{title, pinned, urls}`) read from a closed profile's `Sync Data/LevelDB`: no extension API lists them. |
 | `parseLiveOptions(argv, env, {usage})`, `parseProxy(address)` | A live checker's command line (`--only`, `--category`, `--concurrency`, `--proxy` or `HTTPS_PROXY`, `--locale`, `--timezone`, `--out`, `--help`), and a proxy address for Playwright with its password hidden for the output. |
-| `runLiveCheck({chromium, build, prefix, root, sites, categories, pageMs, visit, failed, onResult})`, `liveUsage(categories, n)` | A live checker's whole run: its command line (`parseLiveOptions`, usage from the categories), the sites chosen, the exit point printed, each site visited on a fresh page in a browser with the extension (one a slot, at most 4, passing for a person's), within `pageMs` (a browser whose page ran out of time replaced), Ctrl-C closing them all; `{dir, started, finished, exit, browser, results}` for the checker's report. |
+| `runLiveCheck({chromium, build, prefix, root, sites, categories, pageMs, visit, failed, onResult})`, `liveUsage(categories, n)` | A live checker's whole run: its command line (`parseLiveOptions`, usage from the categories), the sites chosen, the exit point printed, each site visited on a fresh page in a browser with the extension (one a slot, at most 4, passing for a person's), within `pageMs` (a browser whose page ran out of time replaced), Ctrl-C closing them all; `{dir, started, finished, exit, browser, results}` for the checker's report. A visit that throws, runs out of time or loses its browser is `failed(site, why)` and the run goes on with a new browser. The report folder is emptied only if the kit made it (`reportFolder`, `REPORT_MARKER`): `--out` on a folder with other files in it is refused. |
 | `exitPoint(request)` | Where the run's traffic leaves for the internet (`{ip, country, where, source}`), from a keyless lookup service through the context's proxy: sites decide what to show by it. |
-| `filesUnder`, `zipEntries`, `missingReferences`, `manifestReferences` | For a packaging test: the zip is the folder, and every path the extension names resolves (a `#fragment` or `?query` ignored: `referencedPath`). |
+| `filesUnder`, `zipEntries`, `missingReferences`, `manifestReferences` | For a packaging test: the zip is the folder, and every path the extension names is a file the zip holds (one left out of the zip is as missing as one that isn't there): imports (`from`, `import()`, a bare `import './x.js'`), `getURL`, `src`/`href`, a stylesheet's `url()` and `@import`, and the manifest's worker, pages, icons, content scripts, default locale's messages, rule files and web-accessible resources. A `#fragment` or `?query` is ignored (`referencedPath`). |
 
 ## Stylesheet classes
 

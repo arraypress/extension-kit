@@ -1,3 +1,5 @@
+import { fakeChromeStorage } from '../src/testing/fake-storage.js';
+import { fakeLanguageModel } from '../src/testing/fake-model.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -109,11 +111,19 @@ describe('checkRunner', () => {
     assert.deepEqual(exit.mock.calls.map((call) => call.arguments), [[1]]);
   });
 
-  it('exits nothing when every check passed', (t) => {
-    t.mock.method(console, 'log', () => {});
-    const exit = t.mock.method(process, 'exit', /** @type {(code?: number) => never} */ (() => undefined));
-    checkRunner().finish();
+  it('exits nothing when every check passed', async (t) => {
+    const { exit } = captured(t);
+    const { check, finish } = checkRunner();
+    await check('passes', () => {});
+    finish();
     assert.equal(exit.mock.callCount(), 0);
+  });
+
+  it('a run with no checks at all hasn’t passed: finish exits with 1', (t) => {
+    const { lines, exit } = captured(t);
+    checkRunner().finish();
+    assert.deepEqual(lines, ['\n0 passed, 0 failed', '  No checks ran.']);
+    assert.deepEqual(exit.mock.calls.map((call) => call.arguments), [[1]]);
   });
 });
 
@@ -152,6 +162,38 @@ describe('messageLookup', () => {
       assert.equal(gb('optionsColor'), 'Colour');
       assert.equal(gb('optionsMoreActions', 'bbc.co.uk'), 'More actions for bbc.co.uk');
       assert.deepEqual(Object.keys(readMessages(dir, 'en_GB')), ['optionsColor']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fills messages as Chromium does: any case, bare $1, $$, a stray $; and refuses an undefined placeholder', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'kit-messages-'));
+    /** @param {Record<string, unknown>} messages */
+    const write = (messages) => writeFile(path.join(dir, '_locales', 'en', 'messages.json'), JSON.stringify(messages));
+    try {
+      await mkdir(path.join(dir, '_locales', 'en'), { recursive: true });
+      await write({
+        a: { message: 'Hi $NAME$, $1 costs $$5 ($2)', placeholders: { name: { content: '$1' } } },
+        Mixed: { message: 'mixed $Who$', placeholders: { WHO: { content: '<$2|$1>' } } },
+        dollar: { message: '100$ and $ alone and $$$1' },
+        nested: { message: '$A$', placeholders: { a: { content: '$1 and $$ and $A$' } } },
+      });
+      const t = messageLookup(dir);
+      // Each line is what Playwright's Chromium answered for the same messages.
+      assert.equal(t('a', ['Sam', 'two']), 'Hi Sam, Sam costs $5 (two)');
+      assert.equal(t('a', 'Sam'), 'Hi Sam, Sam costs $5 ()');
+      assert.equal(t('a'), 'Hi ,  costs $5 ()');
+      assert.equal(t('A', ['Sam']), 'Hi Sam, Sam costs $5 ()');
+      assert.equal(t('a', [1, 2]), 'Hi 1, 1 costs $5 (2)');
+      assert.equal(t('MIXED', ['Sam', 'two']), 'mixed <two|Sam>');
+      assert.equal(t('dollar', ['x']), '100and alone and $$1');
+      assert.equal(t('nested', ['Sam']), 'Sam and $ and ');
+      assert.equal(t('a', ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']), undefined);
+      await write({ b: { message: 'Hello $WHO$' } });
+      assert.throws(() => messageLookup(dir), /“b” uses \$WHO\$ but has no such placeholder/);
+      await write({ ten: { message: '$1$2' } });
+      assert.throws(() => messageLookup(dir), /“ten” uses \$1\$/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -276,5 +318,109 @@ describe('pierceNodes, nodeAttribute, nodeText', () => {
     assert.equal(nodeAttribute(nodes[1], 'class'), 'box', 'a name, not a value that looks like one');
     assert.equal(nodeAttribute(nodes[1], 'title'), '');
     assert.equal(nodeText(nodes[3]), 'in shadow');
+  });
+});
+
+describe('fakeChromeStorage, as Chrome behaves (each line read from real Chromium)', () => {
+  it('sync counts an item’s bytes as Chrome does: UTF-8, `<` as six, the limit at 8,192', async () => {
+    const { sync } = fakeChromeStorage();
+    await assert.rejects(sync.set({ rules: '漢'.repeat(4000) }), /kQuotaBytesPerItem quota exceeded/);
+    await sync.set({ rules: '漢'.repeat(2700) });
+    await assert.rejects(sync.set({ h: '<'.repeat(1400) }), /kQuotaBytesPerItem quota exceeded/);
+    await sync.set({ h: '<'.repeat(1300) });
+    assert.equal(await sync.getBytesInUse('h'), 7803);
+    await sync.set({ k: 'x'.repeat(8192 - 1 - 2) });
+    await assert.rejects(sync.set({ k: 'x'.repeat(8192 - 1 - 2 + 1) }), /kQuotaBytesPerItem quota exceeded/);
+  });
+
+  it('sync holds 512 items; clear empties an area and says what went', async () => {
+    const storage = fakeChromeStorage();
+    const many = Object.fromEntries(Array.from({ length: 513 }, (_, i) => [`k${i}`, 1]));
+    await assert.rejects(storage.sync.set(many), /kMaxItems quota exceeded/);
+    delete many.k512;
+    await storage.sync.set(many);
+    /** @type {string[][]} */
+    const cleared = [];
+    storage.onChanged.addListener((changes, area) => cleared.push([area, ...Object.keys(changes)]));
+    await storage.sync.clear();
+    assert.deepEqual(storage.sync.data, {});
+    assert.equal(cleared[0].length, 513);
+    assert.deepEqual(await storage.sync.get(null), {});
+  });
+
+  it('sync takes 120 calls a minute and 1,800 an hour of each of set, remove and clear, refused ones counted', async () => {
+    let time = 0;
+    const { sync } = fakeChromeStorage({ now: () => time });
+    await assert.rejects(sync.set({ big: 'x'.repeat(9000) }), /kQuotaBytesPerItem/);
+    for (let n = 0; n < 119; n++) await sync.set({ n });
+    await assert.rejects(sync.set({ n: 'one too many' }), /MAX_WRITE_OPERATIONS_PER_MINUTE/);
+    await sync.remove('n'); // remove has its own count
+    await sync.clear();
+    time += 60_000;
+    await sync.set({ n: 'the next minute' });
+    // 30 a minute is under the minute's limit; the hour's stops it at 1,800.
+    const steady = fakeChromeStorage({ now: () => time }).sync;
+    let taken = 0;
+    await assert.rejects(async () => {
+      for (; taken < 2000; taken++, time += 1900) await steady.set({ n: taken });
+    }, /MAX_WRITE_OPERATIONS_PER_HOUR/);
+    assert.equal(taken, 1800);
+  });
+
+  it('get takes a key, keys, defaults or nothing; values come back as Chrome stores them', async () => {
+    const { local } = fakeChromeStorage({ local: { a: { x: 1, y: 2 } } });
+    assert.deepEqual(await local.get({ missing: 'default', a: 'unused' }), { a: { x: 1, y: 2 }, missing: 'default' });
+    assert.deepEqual(await local.get('missing'), {});
+    assert.deepEqual(await local.get([]), {});
+    assert.deepEqual(await local.get(['a', 'b']), { a: { x: 1, y: 2 } });
+    await local.set({ u: undefined, n: null, d: new Date(0), nan: NaN, f() {}, re: /x/g, nested: { u: undefined, arr: [undefined, 1] } });
+    assert.deepEqual(await local.get(null), { a: { x: 1, y: 2 }, d: {}, n: null, nested: { arr: [null, 1] }, re: {} });
+    assert.equal(await local.getBytesInUse('n'), 5);
+    assert.equal(await local.getBytesInUse(['missing']), 0);
+  });
+
+  it('onChanged fires for a changed value only (not the same object with its keys reordered), and a listener can be taken off', async () => {
+    const storage = fakeChromeStorage();
+    /** @type {unknown[]} */
+    const heard = [];
+    /** @type {unknown[]} */
+    const areaHeard = [];
+    const listener = (/** @type {unknown} */ changes, /** @type {string} */ area) => heard.push([area, changes]);
+    storage.onChanged.addListener(listener);
+    storage.local.onChanged.addListener((changes) => areaHeard.push(changes));
+    await storage.local.set({ a: { x: 1, y: 2 } });
+    await storage.local.set({ a: { y: 2, x: 1 } });
+    assert.deepEqual(heard, [['local', { a: { newValue: { x: 1, y: 2 } } }]]);
+    assert.deepEqual(areaHeard, [{ a: { newValue: { x: 1, y: 2 } } }]);
+    assert.equal(storage.onChanged.hasListener(listener), true);
+    storage.onChanged.removeListener(listener);
+    await storage.local.set({ a: 2 });
+    assert.equal(heard.length, 1);
+    assert.equal(areaHeard.length, 2);
+  });
+});
+
+describe('fakeLanguageModel, where Chrome refuses', () => {
+  it('a destroyed session answers nothing more, and an answer under way is stopped', async () => {
+    const model = fakeLanguageModel({ answerMs: 30 });
+    const session = await model.create();
+    const underWay = session.prompt('Hi');
+    session.destroy();
+    session.destroy();
+    await assert.rejects(underWay, { name: 'AbortError' });
+    await assert.rejects(session.prompt('Again'), { name: 'InvalidStateError' });
+    await assert.rejects(session.clone(), { name: 'InvalidStateError' });
+    assert.equal(model.log.destroyed, 1);
+    assert.deepEqual(model.log.prompts, ['Hi']);
+  });
+
+  it('a download needs a click behind it; a model that’s here doesn’t', async () => {
+    const model = fakeLanguageModel({ availability: 'downloadable', userActivation: false });
+    await assert.rejects(model.create(), { name: 'NotAllowedError' });
+    assert.equal(model.state.availability, 'downloadable');
+    model.set({ userActivation: true });
+    await model.create();
+    model.set({ userActivation: false });
+    await model.create();
   });
 });

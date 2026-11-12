@@ -9,8 +9,10 @@
  * Stand in for Chrome's permission prompt in a page: each `chrome.permissions.request` is
  * recorded on `window.asked` (what was asked, and whether a click was behind it,
  * `navigator.userActivation.isActive`) and answered from `answers` (the next one; the last is
- * kept), as a person clicking “Allow” or “Deny” would. Runs in the page: give it to
- * `page.evaluate` or `page.addInitScript`, so it takes no closures.
+ * kept), as a person clicking “Allow” or “Deny” would. A request with no click behind it is
+ * refused as Chrome refuses it (“This function must be called during a user gesture”) and takes
+ * no answer. Runs in the page: give it to `page.evaluate` or `page.addInitScript`, so it takes
+ * no closures.
  *
  * @param {boolean[]} answers - The answers, in order.
  * @example
@@ -23,7 +25,9 @@ export function playPermissionPrompt(answers) {
   const asked = [];
   Object.assign(window, { asked });
   chrome.permissions.request = /** @type {typeof chrome.permissions.request} */ (/** @type {unknown} */ (async (/** @type {chrome.permissions.Permissions} */ permissions) => {
-    asked.push({ permissions: permissions.permissions, origins: permissions.origins, gesture: navigator.userActivation.isActive });
+    const gesture = navigator.userActivation.isActive;
+    asked.push({ permissions: permissions.permissions, origins: permissions.origins, gesture });
+    if (!gesture) throw new Error('This function must be called during a user gesture');
     return answers.length > 1 ? answers.shift() : answers[0];
   }));
 }

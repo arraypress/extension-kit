@@ -8,8 +8,10 @@
  * Stand in for Chrome's permission prompt in a page: each `chrome.permissions.request` is
  * recorded on `window.asked` (what was asked, and whether a click was behind it,
  * `navigator.userActivation.isActive`) and answered from `answers` (the next one; the last is
- * kept), as a person clicking “Allow” or “Deny” would. Runs in the page: give it to
- * `page.evaluate` or `page.addInitScript`, so it takes no closures.
+ * kept), as a person clicking “Allow” or “Deny” would. A request with no click behind it is
+ * refused as Chrome refuses it (“This function must be called during a user gesture”) and takes
+ * no answer. Runs in the page: give it to `page.evaluate` or `page.addInitScript`, so it takes
+ * no closures.
  *
  * @param {boolean[]} answers - The answers, in order.
  * @example

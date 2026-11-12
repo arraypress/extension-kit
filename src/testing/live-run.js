@@ -10,9 +10,9 @@
  * @module testing/live-run
  */
 
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { within } from '../time/time.js';
+import { deadline, within } from '../time/time.js';
 import { eachLimited } from '../time/pool.js';
 import { chromeUserAgent, closeOnSignal, realisticBrowser } from './browser.js';
 import { launchExtension } from './e2e.js';
@@ -60,10 +60,43 @@ export const liveUsage = (categories, concurrency) => `Usage: npm run live -- [o
   --out <dir>          write the report there (default test/live/report)
   --help`;
 
+/** The file that marks a folder as a live report the kit made, so the next run may replace it. */
+export const REPORT_MARKER = '.live-report';
+
+/**
+ * The folder a run's report goes in, made empty. Only a folder the kit made is ever emptied:
+ * the checker's own (`own`), or one carrying {@link REPORT_MARKER} from an earlier run. A new
+ * or empty folder is taken (and marked); a folder with anything else in it is refused, so
+ * `--out .` or `--out ~/Desktop` can't delete what's there.
+ *
+ * @param {string} dir - The folder.
+ * @param {{own?: boolean}} [options] - `own`: the checker's default folder, replaced without asking.
+ * @returns {Promise<string>} `dir`, empty but for the marker.
+ * @throws {Error} When the folder holds files and isn't a report folder.
+ *
+ * @example
+ * await reportFolder('/tmp/report'); // made, or emptied if an earlier run made it
+ */
+export async function reportFolder(dir, { own = false } = {}) {
+  const entries = await readdir(dir).catch(() => /** @type {string[]} */ ([]));
+  if (entries.length && !own && !entries.includes(REPORT_MARKER)) {
+    throw new Error(`${dir} has files in it and isn't a report folder: choose a new or empty folder for --out`);
+  }
+  if (entries.length) await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, REPORT_MARKER), 'A live check\'s report: the next run replaces this folder.\n');
+  return dir;
+}
+
+/** Stands for a visit that ran out of time. */
+const LATE = Symbol('late');
+
 /**
  * Run a live check: read the command line, visit the chosen sites, give back every visit.
  * Prints the usage and exits for `--help` (or an option it doesn't know), and exits when no
- * site matches.
+ * site matches or `--out` names a folder with other files in it ({@link reportFolder}). A visit
+ * that throws, runs out of time or loses its browser is `failed` with why, and the run goes on
+ * (the slot gets a new browser).
  *
  * @template {LiveSite} S
  * @template R
@@ -76,7 +109,7 @@ export const liveUsage = (categories, concurrency) => `Usage: npm run live -- [o
  * @param {string[]} run.categories - The categories' ids, for the usage.
  * @param {number} run.pageMs - The most a visit may take.
  * @param {(browser: LaunchedExtension, page: Page, site: S) => Promise<R>} run.visit - Check one site, on a fresh page.
- * @param {(site: S, error: string) => R} run.failed - A visit that couldn't finish (`'timed out'`).
+ * @param {(site: S, error: string) => R} run.failed - A visit that couldn't finish: `'timed out'`, or the error's message.
  * @param {(result: {site: S, visit: R}) => void} [run.onResult] - Each visit as it finishes (a line of output).
  * @param {{argv?: string[], env?: Record<string, string | undefined>, concurrency?: number, findExit?: typeof exitPoint}} [run.command] - The
  *   arguments and environment (default the process's), the most sites at once (default 4), and how the exit point
@@ -109,9 +142,14 @@ export async function runLiveCheck({ chromium, build, prefix, root, sites, categ
     console.error('No pages match.');
     process.exit(2);
   }
-  const dir = options.out ? path.resolve(options.out) : path.join(root, 'test', 'live', 'report');
-  await rm(dir, { recursive: true, force: true });
-  await mkdir(dir, { recursive: true });
+  /** @type {string} */
+  let dir;
+  try {
+    dir = await reportFolder(options.out ? path.resolve(options.out) : path.join(root, 'test', 'live', 'report'), { own: !options.out });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(2);
+  }
 
   const browserOptions = realisticBrowser(options.proxy ? { proxy: options.proxy } : {});
   const plain = await chromium.launch({ channel: 'chromium', ...browserOptions });
@@ -133,19 +171,27 @@ export async function runLiveCheck({ chromium, build, prefix, root, sites, categ
     /** @type {{site: S, visit: R}[]} */
     const results = [];
     await eachLimited(chosen, options.concurrency, async (site, slot, index) => {
-      browsers[slot] ??= await launchExtension(chromium, build, { prefix: `${prefix}${slot}-`, ...launchOptions });
-      const launched = /** @type {LaunchedExtension} */ (browsers[slot]);
-      await within(launched.context.clearCookies(), 10_000, undefined);
-      const page = await launched.context.newPage();
-      const result = await within(visit(launched, page, site), pageMs, undefined);
-      const timedOut = result === undefined;
-      await within(page.close(), 15_000, undefined);
-      if (timedOut) {
-        // A page that ran out of time may have left its browser stuck: the slot gets a new one.
-        await within(launched.close(), 15_000, undefined);
+      /** @type {R} */
+      let outcome;
+      try {
+        browsers[slot] ??= await launchExtension(chromium, build, { prefix: `${prefix}${slot}-`, ...launchOptions });
+        const launched = /** @type {LaunchedExtension} */ (browsers[slot]);
+        await within(launched.context.clearCookies(), 10_000, undefined);
+        const page = await launched.context.newPage();
+        try {
+          const result = await deadline(/** @type {Promise<R | typeof LATE>} */ (visit(launched, page, site)), pageMs, (resolve) => resolve(LATE));
+          if (result === LATE) throw new Error('timed out');
+          outcome = result;
+        } finally {
+          await within(page.close(), 15_000, undefined);
+        }
+      } catch (error) {
+        // A visit that failed may have left its browser stuck, or lost it: the slot gets a new one.
+        await within(Promise.resolve(browsers[slot]?.close()), 15_000, undefined);
         browsers[slot] = null;
+        outcome = failed(site, error instanceof Error ? error.message : String(error));
       }
-      results[index] = { site, visit: timedOut ? failed(site, 'timed out') : /** @type {R} */ (result) };
+      results[index] = { site, visit: outcome };
       onResult(results[index]);
     });
     return {

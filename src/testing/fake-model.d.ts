@@ -4,7 +4,9 @@
  * worker's or page's `globalThis`: Playwright's Chromium has no model). It
  * acts out what a real Chrome does: a model still to download (with
  * progress), one this computer can't run, a slow first session (the cold
- * start), a slow answer, an answer cut short by its signal, and a failure.
+ * start), a slow answer, an answer cut short by its signal, a failure, a
+ * session that's been destroyed (it answers nothing more), and a download
+ * asked for without a click (Chrome refuses it).
  * Moved here from Better Downloads' tests, so every extension that uses the
  * model tests against the same one.
  *
@@ -38,6 +40,12 @@ export type FakeModelState = {
      * Whether a download fails part way.
      */
     failDownload: boolean;
+    /**
+     * Whether a click is behind a `create()` that has to download the
+     * model (Chrome refuses one without: `NotAllowedError`). `null`, the default, reads the page's own
+     * `navigator.userActivation` (and takes it as given where there's none: Node, a worker).
+     */
+    userActivation: boolean | null;
 };
 export type FakeModelLog = {
     /**

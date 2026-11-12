@@ -164,10 +164,12 @@ export declare function stopWorker({ context, worker, extensionId, url }: Pick<L
 export declare function offscreenEmulator(cdp: CDPSession, suffix?: string): Promise<(scheme: 'light' | 'dark') => Promise<unknown>>;
 /**
  * Wrap the worker's real `chrome.action.setIcon` so each call is recorded once
- * Chrome has taken it (a path Chrome can't load fails, and isn't recorded).
+ * Chrome has taken it (a path Chrome can't load fails, and isn't recorded):
+ * its `path`, or `'imageData'` for an icon given as pixels. The record lives
+ * in the worker: it's gone when the worker restarts ({@link stopWorker}).
  *
  * @param {Worker} worker - The extension's service worker.
- * @returns {Promise<() => Promise<unknown[]>>} Reads the recorded `path`s, oldest first.
+ * @returns {Promise<() => Promise<unknown[]>>} Reads the recorded icons, oldest first.
  */
 export declare function recordIconCalls(worker: Worker): Promise<() => Promise<unknown[]>>;
 /** How long one check may take before it's failed, in ms: long enough for a slow real-browser check, short of a hang. */
@@ -186,7 +188,8 @@ export type CheckRunner = {
      */
     fail: (name: string) => void;
     /**
-     * Print the tally, and exit with 1 if anything failed.
+     * Print the tally, and exit with 1 if anything failed or no check ran at all
+     * (a script that returned early, or whose filter matched nothing, hasn't passed).
      */
     finish: () => void;
 };
@@ -200,7 +203,8 @@ export type CheckRunner = {
  *   whether it passed.
  * @property {(name: string) => void} fail Count a failure found outside any check (a page's
  *   uncaught error, say): printed now, listed and counted at the end.
- * @property {() => void} finish Print the tally, and exit with 1 if anything failed.
+ * @property {() => void} finish Print the tally, and exit with 1 if anything failed or no check ran at all
+ *   (a script that returned early, or whose filter matched nothing, hasn't passed).
  */
 /**
  * Make a {@link CheckRunner}: "✓ name" for a pass, "✗ name" and the error's

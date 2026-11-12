@@ -7,12 +7,12 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import {
-  extensionProfile, filesIn, installWarnings, launchDownloading, launchExtension, savedTabGroups, serve, stopWorker, until, warningsAddedBy,
+  REPORT_MARKER, extensionProfile, filesIn, installWarnings, launchDownloading, launchExtension, recordIconCalls, reportFolder, runLiveCheck, savedTabGroups, serve, stopWorker, until, warningsAddedBy,
   withoutPermissions,
 } from '../src/testing/index.js';
 
@@ -159,6 +159,12 @@ describe('playPermissionPrompt (Chromium)', () => {
         { permissions: undefined, origins: ['https://example.com/*'], gesture: true },
         { permissions: ['downloads'], origins: undefined, gesture: true },
       ]);
+      // No click behind it (the activation a click gives lasts five seconds): refused, as Chrome refuses it.
+      const late = await page.evaluate(() => new Promise((resolve) => {
+        setTimeout(() => chrome.permissions.request({ permissions: ['tabs'] }).then(() => resolve('answered'), (error) => resolve(error.message)), 5500);
+      }));
+      assert.equal(late, 'This function must be called during a user gesture');
+      assert.deepEqual((await page.evaluate(() => /** @type {any} */ (window).asked)).at(-1), { permissions: ['tabs'], origins: undefined, gesture: false });
     } finally {
       await browser.close();
     }
@@ -228,4 +234,81 @@ describe('runLiveCheck (Chromium)', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+});
+
+describe('a live check’s run', () => {
+  it('reportFolder empties only a folder the kit made: never one with other files in it', async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), 'extension-kit-report-'));
+    try {
+      const theirs = path.join(tmp, 'desktop');
+      await mkdir(theirs);
+      await writeFile(path.join(theirs, 'thesis.txt'), 'years of work');
+      await assert.rejects(reportFolder(theirs), /has files in it and isn't a report folder/);
+      assert.deepEqual(await readdir(theirs), ['thesis.txt']);
+      const fresh = path.join(tmp, 'new', 'report');
+      await reportFolder(fresh);
+      await writeFile(path.join(fresh, 'report.json'), '{}');
+      await reportFolder(fresh);
+      assert.deepEqual(await readdir(fresh), [REPORT_MARKER], 'an earlier run’s report is replaced');
+      await mkdir(path.join(tmp, 'empty'));
+      assert.deepEqual(await readdir(await reportFolder(path.join(tmp, 'empty'))), [REPORT_MARKER]);
+      await reportFolder(theirs, { own: true });
+      assert.deepEqual(await readdir(theirs), [REPORT_MARKER], 'the checker’s own default folder is replaced');
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('a visit that throws, loses its browser or runs out of time is failed with why, and the run goes on', () => withExtension({}, async (build) => {
+    const site = await serve({ '/': '<!doctype html><title>Site</title>' });
+    const root = await mkdtemp(path.join(tmpdir(), 'extension-kit-live-'));
+    try {
+      const sites = ['throws', 'fine', 'crashes', 'after', 'hangs', 'last'].map((name) => ({ name, url: `${site.origin}/?${name}`, category: 'all' }));
+      const run = await runLiveCheck({
+        chromium, build, prefix: 'extension-kit-live-', root, sites, categories: ['all'], pageMs: 1500,
+        visit: async (browser, page, { name, url }) => {
+          await page.goto(url);
+          if (name === 'throws') throw new Error('the checker tripped');
+          if (name === 'crashes') await browser.context.close();
+          if (name === 'hangs') await new Promise(() => {});
+          return `${name}: ${await page.title()}`;
+        },
+        failed: (failedSite, error) => `${failedSite.name} failed: ${error}`,
+        command: { argv: [], env: {}, concurrency: 1, findExit: async () => null },
+      });
+      const visits = run.results.map((result) => result.visit);
+      assert.equal(visits[0], 'throws failed: the checker tripped');
+      assert.equal(visits[1], 'fine: Site');
+      assert.match(visits[2], /^crashes failed: .*closed/);
+      assert.equal(visits[3], 'after: Site', 'the slot got a new browser');
+      assert.equal(visits[4], 'hangs failed: timed out');
+      assert.equal(visits[5], 'last: Site');
+      assert.deepEqual(await readdir(run.dir), [REPORT_MARKER]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await site.close();
+    }
+  }));
+});
+
+describe('launchExtension', () => {
+  it('an extension Chrome refuses to load fails with why, and leaves no browser running', () => withExtension({ default_locale: 'en' }, async (dir) => {
+    await mkdir(path.join(dir, '_locales', 'en'), { recursive: true });
+    await writeFile(path.join(dir, '_locales', 'en', 'messages.json'), JSON.stringify({ hello: { message: 'Hello $WHO$' } }));
+    await assert.rejects(launchExtension(chromium, dir), /didn't start a service worker: Chrome may have refused to load it/);
+  }));
+
+  it('recordIconCalls records an icon given as a path, and one given as pixels', () => withExtension({ action: {} }, async (dir) => {
+    const { worker, close } = await launchExtension(chromium, dir);
+    try {
+      const calls = await recordIconCalls(worker);
+      await worker.evaluate(async () => {
+        await chrome.action.setIcon({ imageData: new ImageData(16, 16) });
+        await chrome.action.setIcon({ path: 'missing.png' }).catch(() => {});
+      });
+      assert.deepEqual(await calls(), ['imageData']);
+    } finally {
+      await close();
+    }
+  }));
 });

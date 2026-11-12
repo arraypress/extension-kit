@@ -80,10 +80,31 @@ export type LiveRun<S extends LiveSite, R> = {
  * @returns {string} The text.
  */
 export declare const liveUsage: (categories: string[], concurrency: number) => string;
+/** The file that marks a folder as a live report the kit made, so the next run may replace it. */
+export declare const REPORT_MARKER = ".live-report";
+/**
+ * The folder a run's report goes in, made empty. Only a folder the kit made is ever emptied:
+ * the checker's own (`own`), or one carrying {@link REPORT_MARKER} from an earlier run. A new
+ * or empty folder is taken (and marked); a folder with anything else in it is refused, so
+ * `--out .` or `--out ~/Desktop` can't delete what's there.
+ *
+ * @param {string} dir - The folder.
+ * @param {{own?: boolean}} [options] - `own`: the checker's default folder, replaced without asking.
+ * @returns {Promise<string>} `dir`, empty but for the marker.
+ * @throws {Error} When the folder holds files and isn't a report folder.
+ *
+ * @example
+ * await reportFolder('/tmp/report'); // made, or emptied if an earlier run made it
+ */
+export declare function reportFolder(dir: string, { own }?: {
+    own?: boolean;
+}): Promise<string>;
 /**
  * Run a live check: read the command line, visit the chosen sites, give back every visit.
  * Prints the usage and exits for `--help` (or an option it doesn't know), and exits when no
- * site matches.
+ * site matches or `--out` names a folder with other files in it ({@link reportFolder}). A visit
+ * that throws, runs out of time or loses its browser is `failed` with why, and the run goes on
+ * (the slot gets a new browser).
  *
  * @template {LiveSite} S
  * @template R
@@ -96,7 +117,7 @@ export declare const liveUsage: (categories: string[], concurrency: number) => s
  * @param {string[]} run.categories - The categories' ids, for the usage.
  * @param {number} run.pageMs - The most a visit may take.
  * @param {(browser: LaunchedExtension, page: Page, site: S) => Promise<R>} run.visit - Check one site, on a fresh page.
- * @param {(site: S, error: string) => R} run.failed - A visit that couldn't finish (`'timed out'`).
+ * @param {(site: S, error: string) => R} run.failed - A visit that couldn't finish: `'timed out'`, or the error's message.
  * @param {(result: {site: S, visit: R}) => void} [run.onResult] - Each visit as it finishes (a line of output).
  * @param {{argv?: string[], env?: Record<string, string | undefined>, concurrency?: number, findExit?: typeof exitPoint}} [run.command] - The
  *   arguments and environment (default the process's), the most sites at once (default 4), and how the exit point

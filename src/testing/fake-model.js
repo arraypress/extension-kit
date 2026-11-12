@@ -4,7 +4,9 @@
  * worker's or page's `globalThis`: Playwright's Chromium has no model). It
  * acts out what a real Chrome does: a model still to download (with
  * progress), one this computer can't run, a slow first session (the cold
- * start), a slow answer, an answer cut short by its signal, and a failure.
+ * start), a slow answer, an answer cut short by its signal, a failure, a
+ * session that's been destroyed (it answers nothing more), and a download
+ * asked for without a click (Chrome refuses it).
  * Moved here from Better Downloads' tests, so every extension that uses the
  * model tests against the same one.
  *
@@ -25,6 +27,9 @@
  * @property {(prompt: string, options: PromptOptions) => string} answer The answer to a prompt.
  * @property {boolean} failPrompt Whether answers fail (the model gave up).
  * @property {boolean} failDownload Whether a download fails part way.
+ * @property {boolean | null} userActivation Whether a click is behind a `create()` that has to download the
+ *   model (Chrome refuses one without: `NotAllowedError`). `null`, the default, reads the page's own
+ *   `navigator.userActivation` (and takes it as given where there's none: Node, a worker).
  */
 
 /**
@@ -77,7 +82,7 @@ function wait(ms, signal) {
 export function fakeLanguageModel(initial = {}) {
   /** @type {FakeModelState} */
   const state = {
-    availability: 'available', createMs: 0, answerMs: 0, answer: () => 'Fake answer', failPrompt: false, failDownload: false, ...initial,
+    availability: 'available', createMs: 0, answerMs: 0, answer: () => 'Fake answer', failPrompt: false, failDownload: false, userActivation: null, ...initial,
   };
   /** @type {FakeModelLog} */
   const log = { availability: [], created: [], prompts: [], promptOptions: [], cloned: 0, aborted: 0, destroyed: 0 };
@@ -87,27 +92,40 @@ export function fakeLanguageModel(initial = {}) {
    *
    * @returns {LanguageModelSession} It.
    */
-  const session = () => ({
-    async prompt(prompt, options = {}) {
-      log.prompts.push(prompt);
-      log.promptOptions.push(options);
-      try {
-        await wait(state.answerMs, options.signal);
-      } catch (error) {
-        log.aborted++;
-        throw error;
-      }
-      if (state.failPrompt) throw new DOMException('The model failed', 'UnknownError');
-      return state.answer(prompt, options);
-    },
-    async clone() {
-      log.cloned++;
-      return session();
-    },
-    destroy() {
-      log.destroyed++;
-    },
-  });
+  const session = () => {
+    let destroyed = false;
+    /** Chrome's refusal to use a session that's been destroyed. */
+    const refuseDestroyed = () => {
+      if (destroyed) throw new DOMException('The session has been destroyed.', 'InvalidStateError');
+    };
+    return /** @type {LanguageModelSession} */ ({
+      async prompt(prompt, options = {}) {
+        refuseDestroyed();
+        log.prompts.push(prompt);
+        log.promptOptions.push(options);
+        try {
+          await wait(state.answerMs, options.signal);
+        } catch (error) {
+          log.aborted++;
+          throw error;
+        }
+        // Destroyed while it was answering: Chrome stops the answer.
+        if (destroyed) throw new DOMException('The session has been destroyed.', 'AbortError');
+        if (state.failPrompt) throw new DOMException('The model failed', 'UnknownError');
+        return state.answer(prompt, options);
+      },
+      async clone() {
+        refuseDestroyed();
+        log.cloned++;
+        return session();
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        log.destroyed++;
+      },
+    });
+  };
 
   return {
     state,
@@ -121,6 +139,9 @@ export function fakeLanguageModel(initial = {}) {
       log.created.push(options);
       if (state.availability === 'unavailable') throw new DOMException('Not supported', 'NotSupportedError');
       if (state.availability !== 'available') {
+        // Chrome starts a download only from a click (transient user activation).
+        const active = state.userActivation ?? /** @type {{navigator?: {userActivation?: {isActive: boolean}}}} */ (globalThis).navigator?.userActivation?.isActive ?? true;
+        if (!active) throw new DOMException('Requires a user gesture when availability is "downloading" or "downloadable".', 'NotAllowedError');
         // A download, reported as Chrome reports it, then the model is here.
         const monitor = new EventTarget();
         options.monitor?.(monitor);
