@@ -14,11 +14,9 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 import { chromium } from 'playwright';
 import { serve, until } from '../src/testing/index.js';
+import { kitSource } from './fixtures/kit-source.js';
 import { SITE_LIST_MESSAGES, SITE_LIST_WORDS, TOAST_MS } from '../src/index.js';
 
 /** @import { Browser, Page } from 'playwright' */
@@ -34,8 +32,6 @@ import { SITE_LIST_MESSAGES, SITE_LIST_WORDS, TOAST_MS } from '../src/index.js';
  * @property {string[]} ran The items run, in order.
  * @property {string | null} answer What `askText` resolved to; 'pending' until then.
  */
-
-const SRC = fileURLToPath(new URL('../src/', import.meta.url));
 
 /** A page with a row and its ⋮ button near the top right, and a button at the bottom right. */
 const PAGE = `<!doctype html>
@@ -112,11 +108,7 @@ before(async () => {
     if (pathname === '/') return PAGE;
     if (pathname === '/content') return CONTENT_PAGE;
     if (pathname === '/copy') return COPY_PAGE;
-    const file = path.join(SRC, path.normalize(pathname.replace(/^\/src\//, '')));
-    if (!file.startsWith(SRC)) return undefined;
-    const body = await readFile(file).catch(() => undefined);
-    if (!body) return undefined;
-    return { body, type: file.endsWith('.css') ? 'text/css' : 'text/javascript' };
+    return kitSource(pathname);
   });
   browser = await chromium.launch();
 });

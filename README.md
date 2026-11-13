@@ -21,6 +21,9 @@ The pieces ArrayPress's Chrome extensions share, so each is written once:
   every answer, cold starts, and the settings page's “Chrome’s built-in AI” row.
 - **Content-script helpers**: a big page worked through in slices that never hold it long, and a
   change watcher for single-page apps and endless lists.
+- **Files**: a ZIP written a file at a time with nothing but the platform (stored or deflated,
+  ZIP64 when it's needed, memory flat however big the files), and files saved through
+  `chrome.downloads` or a link's download.
 - **Build and test helpers** (Node): icon rendering, vendoring npm packages (with a staleness
   check), test builds, store screenshots, zipping for the Chrome Web Store, a fake
   `chrome.storage`, Playwright helpers with time limits, packaging checks, and a copied-code guard.
@@ -473,6 +476,47 @@ in document order, into open and closed shadow roots (`shadowRootOf`, through
 (`MAX_ELEMENTS`). `otherSiteFrames(doc)` gives the origins of frames from other sites, which a
 reading of the tab leaves out until the person allows those sites.
 
+## Files
+
+```js
+const zip = createZip();
+await zip.add('Lake.jpg', blob);                               // a Blob: stored, read in 4 MiB slices
+await zip.add('notes/Read me.txt', encoder.encode('Hello'));   // or a Uint8Array: deflated
+await saveFiles([{ name: 'Trip.zip', blob: await zip.finish() }], chrome.downloads);
+```
+
+`createZip({store, zip64, heldBytes, date})` writes a ZIP with no library: `add(name, data, {store, date})`
+puts a `Blob` or `Uint8Array` in and resolves once it's written, in the order added (an `add` made
+before the last has resolved waits its turn); `count()`, `bytes()` (uncompressed), and `finish()`
+gives a `Blob` of type `application/zip`. Runs in a page, a worker or Node.
+
+- **Stored or deflated by name.** Formats that are compressed already (`isStoredName(name)`: JPEG,
+  PNG, WebP, MP4, PDF, ZIP, Office documents, WOFF…) are stored as they are; the rest goes through
+  the platform's `CompressionStream('deflate-raw')` (Chrome 103, Node 20.12). `store: true` stores
+  everything (or one file); an empty file is always stored.
+- **Memory stays flat.** ZIP bytes are held up to `heldBytes` (16 MiB, `HELD_BYTES`) and then handed
+  to a growing `Blob`, which Chrome keeps outside the page's memory. A `Blob` bigger than 4 MiB
+  (`SLICE_BYTES`) is read in slices, so a 2 GB video never sits in memory whole. A `Uint8Array` is
+  kept, not copied, until it's handed over: don't write into it again.
+- **Every reader opens it.** A stored file is read twice, once for its CRC-32, so its local header
+  is complete and no data descriptor follows (a stored entry with one can't be read forwards, and
+  some readers refuse it); only deflated files have a data descriptor, as every streaming writer's
+  do. Names are UTF-8 and say so (bit 11), with `/` between folders, and the ZIP says it was made
+  on Unix: Info-ZIP's `unzip` converts the names of an MS-DOS ZIP from an old code page, UTF-8 bit
+  or not, and “Zürich.png” then fails to extract. Checked with fflate, macOS's `unzip`, `ditto`
+  (Archive Utility's reader), `bsdtar` reading forwards and Python's `zipfile`.
+- **ZIP64 when it's needed**, and only then: a file of 4 GiB or more (from 16 MiB short of it), a
+  ZIP that has grown past 4 GiB, more than 65,535 files. `zip64: true` writes it regardless.
+- **A name already in the ZIP is refused** (two files of one name extract as one; give them
+  different names first), as is `add` after `finish`. A file that can't be read rejects its `add`
+  and leaves the ZIP as it was before it, so the rest can still be saved.
+
+`crc32(bytes, seed?)` is the same CRC-32 a PNG's chunks use; `seed` carries on from the bytes before.
+
+`saveFiles(files, downloads, doc?)` saves `{name, blob}` files in order: through `chrome.downloads`
+when the person has granted it (a name already taken gets a number), else as a link's download,
+which Chrome saves the same way. Each blob address is let go after a minute (`KEEP_URL_MS`).
+
 ## Time limits
 
 ```js
@@ -744,7 +788,7 @@ chrome://bookmarks in Chromium 156 / Chrome 157; the sources are listed at the t
 
 ## Development
 
-`npm test` runs ESLint, a strict TypeScript check of the JSDoc (`checkJs`), the tests (the menu,
+`npm test` runs ESLint, a strict TypeScript check of the JSDoc (`checkJs`), the tests (the menu, the ZIP writer in Chrome,
 the dialog, the toast, the dialog site list, the window frame, icon rendering and the Chrome readers in Playwright's
 Chromium, the rest in Node and jsdom), and the
 copied-code guard. The `.d.ts` files are generated from the JSDoc: `npm run types` writes them, and

@@ -5,7 +5,7 @@
  * the built-in AI row), Chrome's window drawn around a capture, per-site lists' sites, Chrome's on-device model,
  * a content script's slices, change watcher, overlay and “Show on page” boxes, a module's
  * function called in a page or every frame of a tab, a tab's side panel opened from a click,
- * copying (plain text and HTML), and making elements and icon buttons in a line. Every function takes the `chrome`
+ * copying (plain text and HTML), a ZIP written a file at a time and files saved, and making elements and icon buttons in a line. Every function takes the `chrome`
  * APIs it uses as arguments, so tests run the real logic against fakes.
  *
  * Build-time helpers are in `@arraypress/extension-kit/build`, test helpers
@@ -30,6 +30,8 @@ export { MAX_WAIT_MS, SETTLE_MS, watchChanges } from './content/watch.js';
 export { copyFormats } from './dom/copy.js';
 export { focusedElement, focusedIn } from './dom/focus.js';
 export { iconButton, make, spriteIcon } from './dom/make.js';
+export { KEEP_URL_MS, saveFiles } from './files/save.js';
+export { HELD_BYTES, SLICE_BYTES, crc32, createZip, isStoredName } from './files/zip.js';
 export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
 export { counted, localize, translator } from './dom/i18n.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
@@ -78,6 +80,10 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./content/overlay.js').PageOverlay} PageOverlay
  * @typedef {import('./dom/copy.js').ClipboardFormats} ClipboardFormats
  * @typedef {import('./content/watch.js').WatchHandlers} WatchHandlers
+ * @typedef {import('./files/save.js').SavedFile} SavedFile
+ * @typedef {import('./files/zip.js').ZipEntryOptions} ZipEntryOptions
+ * @typedef {import('./files/zip.js').ZipOptions} ZipOptions
+ * @typedef {import('./files/zip.js').ZipWriter} ZipWriter
  * @typedef {import('./frame/window.js').Tab} WindowTab
  * @typedef {import('./frame/window.js').Theme} WindowTheme
  * @typedef {import('./frame/window.js').WindowShadow} WindowShadow
