@@ -131,15 +131,17 @@ const SCHEME_JUSTIFICATION = 'Reads whether Chrome is in light or dark mode, to 
  * @param {string} [justification] - What the document is for, when it does more than watch the
  *   scheme (it answers for Chrome's on-device model too, `serveModelOffscreen`): Chrome keeps it
  *   with the document, so it has to be the whole truth.
+ * @param {readonly string[]} [reasons] - Chrome's reasons for whatever else the document does
+ *   (`'DOM_PARSER'` for one that also reads fetched HTML), after MATCH_MEDIA. Default none.
  * @returns {Promise<boolean>} Whether it opened one (false: already open).
  */
-export function watchFromOffscreen({ offscreen, runtime }, url = OFFSCREEN_PATH, justification = SCHEME_JUSTIFICATION) {
+export function watchFromOffscreen({ offscreen, runtime }, url = OFFSCREEN_PATH, justification = SCHEME_JUSTIFICATION, reasons = []) {
   opening ??= (async () => {
     const open = await runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
     if (open.length) return false;
     await offscreen.createDocument({
       url,
-      reasons: [offscreen.Reason.MATCH_MEDIA],
+      reasons: [offscreen.Reason.MATCH_MEDIA, ...reasons],
       justification,
     });
     return true;
@@ -165,17 +167,18 @@ export function watchFromOffscreen({ offscreen, runtime }, url = OFFSCREEN_PATH,
  * worker wakes.
  *
  * @param {ToolbarWorkerApi} api - `chrome`, or a fake.
- * @param {{url?: string, justification?: string}} [document] - The offscreen document and what
- *   it's for, when it isn't the kit's defaults ({@link watchFromOffscreen}).
+ * @param {{url?: string, justification?: string, reasons?: readonly string[]}} [document] - The offscreen
+ *   document, what it's for and Chrome's reasons for what else it does, when they aren't the kit's
+ *   defaults ({@link watchFromOffscreen}).
  * @returns {ToolbarTheme} The theme, for tests.
  * @example
  * // background.js
  * startToolbarTheme(chrome);
  */
-export function startToolbarTheme(api, { url, justification } = {}) {
+export function startToolbarTheme(api, { url, justification, reasons } = {}) {
   const theme = createToolbarTheme({ storage: api.storage.local, action: api.action, extensionId: api.runtime.id });
   theme.restore();
-  watchFromOffscreen(api, url, justification).catch((error) => console.error('Opening the colour scheme watcher:', error));
+  watchFromOffscreen(api, url, justification, reasons).catch((error) => console.error('Opening the colour scheme watcher:', error));
   api.runtime.onMessage.addListener((message, sender) => {
     theme.onMessage(message, sender);
     return false;

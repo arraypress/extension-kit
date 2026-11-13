@@ -534,6 +534,27 @@ await eachLimited(files, 4, async (file) => save(file)); // at most four at once
 `eachLimited(items, limit, work)`: `work(item, slot, index)` on every item, at most `limit` at once;
 in the runtime half too (`/testing` exports it as well).
 
+## A worker's own requests
+
+```js
+// Manifest: "webRequest" (no install warning), and host access to the sites asked (optional is fine).
+const own = ownRequests({ webRequest: chrome.webRequest, extensionId: chrome.runtime.id });
+const stop = own.listen();                   // webRequest listeners, only while requests are made
+const answer = await own.request('https://bit.ly/abc', { headers: { 'If-None-Match': etag }, signal });
+if (answer.status >= 300 && answer.status < 400) next = new URL(answer.headers.get('location'), url).href;
+else html = await answer.response.text();
+stop();
+```
+
+One request that follows nothing: `redirect: 'manual'`, no cookies, no referrer, no cache. Chrome's
+`fetch` answers a manual redirect with an opaque response (no status, no `Location`); webRequest
+does see the worker's own requests to sites it has access to, so the redirect is read from its
+report of the same request (`status`, `headers.get('location')`, `response: null`). The caller
+decides whether to make the next hop: with `isLocalUrl`, a page on the internet never sends a
+check into the person's own network. `leavesWeb` marks a redirect to something that isn't a web
+address (`mailto:`), which Chrome refuses before showing where. `webRequest` must be a required
+permission (a listener added after an optional grant hears nothing until the worker restarts).
+
 ## Page components
 
 Chrome's own components, made in the page by script (no markup to copy), styled by `chrome-ui.css`.

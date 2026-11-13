@@ -31,7 +31,7 @@ const SOURCE = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const KIT = '@arraypress/extension-kit';
 
 /** What a vendored copy of the kit holds, relative to `src/`: everything an extension page or worker may load. */
-export const RUNTIME_ENTRIES = Object.freeze(['index.js', 'index.d.ts', 'about', 'ai', 'commands', 'content', 'dom', 'files', 'frame', 'panel', 'scripting', 'settings', 'sites', 'styles', 'time', 'toolbar', 'ui']);
+export const RUNTIME_ENTRIES = Object.freeze(['index.js', 'index.d.ts', 'about', 'ai', 'commands', 'content', 'dom', 'files', 'frame', 'net', 'panel', 'scripting', 'settings', 'sites', 'styles', 'time', 'toolbar', 'ui']);
 
 /** The kit's stylesheet, an absolute path in the installed package. */
 export const STYLESHEET = path.join(SOURCE, 'styles', 'chrome-ui.css');

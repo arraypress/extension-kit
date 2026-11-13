@@ -136,6 +136,13 @@ describe('offscreen watcher', () => {
     assert.equal(api.offscreen.created[0].url, OFFSCREEN_PATH);
   });
 
+  it('a document that does more says so: its other reasons after MATCH_MEDIA, and its justification', async () => {
+    const api = fakeOffscreen();
+    await watchFromOffscreen(api, undefined, 'Reads light or dark mode, and reads fetched pages.', ['DOM_PARSER']);
+    assert.deepEqual(api.offscreen.created[0].reasons, ['MATCH_MEDIA', 'DOM_PARSER']);
+    assert.equal(api.offscreen.created[0].justification, 'Reads light or dark mode, and reads fetched pages.');
+  });
+
   it('polls, as no change event reaches a document that never renders', (t) => {
     t.mock.timers.enable({ apis: ['setInterval'] });
     const runtime = fakeRuntime();

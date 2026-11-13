@@ -31,6 +31,7 @@ export { KEEP_URL_MS, saveFiles } from './files/save.js';
 export { HELD_BYTES, SLICE_BYTES, crc32, createZip, isStoredName } from './files/zip.js';
 export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
 export { counted, localize, translator } from './dom/i18n.js';
+export { HEADERS_WAIT_MS, OWN_REQUESTS, ownRequests } from './net/requests.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
 export { createShowOnPage } from './panel/show-on-page.js';
@@ -81,6 +82,8 @@ export type ContentScript = import('./scripting/registration.js').ContentScript;
 export type FrameResult = import('./scripting/call.js').FrameResult<unknown>;
 export type TabReading = import('./scripting/tab.js').TabReading<unknown>;
 export type TabEdges = import('./scripting/tab.js').TabEdges;
+export type OwnAnswer = import('./net/requests.js').OwnAnswer;
+export type OwnRequests = import('./net/requests.js').OwnRequests;
 export type ActionMenu = import('./ui/menu.js').ActionMenu;
 export type MenuEntry = import('./ui/menu.js').MenuEntry;
 export type MenuItem = import('./ui/menu.js').MenuItem;
@@ -121,6 +124,8 @@ export type Toast = import('./ui/toast.js').Toast;
  * @typedef {import('./scripting/call.js').FrameResult<unknown>} FrameResult
  * @typedef {import('./scripting/tab.js').TabReading<unknown>} TabReading
  * @typedef {import('./scripting/tab.js').TabEdges} TabEdges
+ * @typedef {import('./net/requests.js').OwnAnswer} OwnAnswer
+ * @typedef {import('./net/requests.js').OwnRequests} OwnRequests
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
  * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem

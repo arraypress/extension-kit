@@ -135,9 +135,11 @@ export type OffscreenApi = {
  * @param {string} [justification] - What the document is for, when it does more than watch the
  *   scheme (it answers for Chrome's on-device model too, `serveModelOffscreen`): Chrome keeps it
  *   with the document, so it has to be the whole truth.
+ * @param {readonly string[]} [reasons] - Chrome's reasons for whatever else the document does
+ *   (`'DOM_PARSER'` for one that also reads fetched HTML), after MATCH_MEDIA. Default none.
  * @returns {Promise<boolean>} Whether it opened one (false: already open).
  */
-export declare function watchFromOffscreen({ offscreen, runtime }: OffscreenApi, url?: string, justification?: string): Promise<boolean>;
+export declare function watchFromOffscreen({ offscreen, runtime }: OffscreenApi, url?: string, justification?: string, reasons?: readonly string[]): Promise<boolean>;
 export type ToolbarWorkerApi = {
     /**
      * `chrome.storage`.
@@ -182,14 +184,16 @@ export type ToolbarWorkerApi = {
  * worker wakes.
  *
  * @param {ToolbarWorkerApi} api - `chrome`, or a fake.
- * @param {{url?: string, justification?: string}} [document] - The offscreen document and what
- *   it's for, when it isn't the kit's defaults ({@link watchFromOffscreen}).
+ * @param {{url?: string, justification?: string, reasons?: readonly string[]}} [document] - The offscreen
+ *   document, what it's for and Chrome's reasons for what else it does, when they aren't the kit's
+ *   defaults ({@link watchFromOffscreen}).
  * @returns {ToolbarTheme} The theme, for tests.
  * @example
  * // background.js
  * startToolbarTheme(chrome);
  */
-export declare function startToolbarTheme(api: ToolbarWorkerApi, { url, justification }?: {
+export declare function startToolbarTheme(api: ToolbarWorkerApi, { url, justification, reasons }?: {
     url?: string;
     justification?: string;
+    reasons?: readonly string[];
 }): ToolbarTheme;

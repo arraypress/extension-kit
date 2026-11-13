@@ -34,6 +34,7 @@ export { KEEP_URL_MS, saveFiles } from './files/save.js';
 export { HELD_BYTES, SLICE_BYTES, crc32, createZip, isStoredName } from './files/zip.js';
 export { MAC_WINDOW, THEMES, WINDOW_BARS, WINDOW_W, letterIcon, macWindowSvg, windowChrome, windowChromeSvg } from './frame/window.js';
 export { counted, localize, translator } from './dom/i18n.js';
+export { HEADERS_WAIT_MS, OWN_REQUESTS, ownRequests } from './net/requests.js';
 export { byId, setAboutLinks, statusFlasher, valueRow } from './dom/page.js';
 export { setUpPage } from './dom/setup.js';
 export { createShowOnPage } from './panel/show-on-page.js';
@@ -92,6 +93,8 @@ export { TOAST_MS, createToast } from './ui/toast.js';
  * @typedef {import('./scripting/call.js').FrameResult<unknown>} FrameResult
  * @typedef {import('./scripting/tab.js').TabReading<unknown>} TabReading
  * @typedef {import('./scripting/tab.js').TabEdges} TabEdges
+ * @typedef {import('./net/requests.js').OwnAnswer} OwnAnswer
+ * @typedef {import('./net/requests.js').OwnRequests} OwnRequests
  * @typedef {import('./ui/menu.js').ActionMenu} ActionMenu
  * @typedef {import('./ui/menu.js').MenuEntry} MenuEntry
  * @typedef {import('./ui/menu.js').MenuItem} MenuItem
