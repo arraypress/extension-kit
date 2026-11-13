@@ -4,7 +4,8 @@
  * the origin an extension asks Chrome for access to, the host a per-site
  * on/off list keeps, whether a page is on a listed site (subdomains
  * included), the match patterns for both, and a list with a site added,
- * taken out or edited. Pure.
+ * taken out or edited; and whether an address is a web page's, and whether
+ * it is on this computer or its own network rather than the internet. Pure.
  *
  * A site is a web host: http or https, with a dot in its name (or
  * `localhost`). Text without a scheme is read as https. Only a real host
@@ -183,4 +184,66 @@ export function withoutSite(sites, site) {
  */
 export function withSiteReplaced(sites, site, edited) {
   return [...new Set(sites.map((s) => (s === site ? edited : s)))];
+}
+
+/**
+ * Whether an address is a web page (http or https), the only kind an
+ * extension can ask Chrome for access to, or fetch.
+ *
+ * @param {string} url - Any address, valid or not.
+ * @returns {boolean} True for http(s).
+ * @example
+ * isWebUrl('https://example.com/'); // true
+ * isWebUrl('mailto:a@example.com'); // false
+ */
+export function isWebUrl(url) {
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a host is this computer or on its own network rather than the internet: `localhost`
+ * and names under it, `.local`, `.lan`, `.internal` and `.home.arpa` names, a name without a dot, and the addresses
+ * kept for loopback, private networks and link-local use (IPv4 0/8, 10/8, 100.64/10, 127/8,
+ * 169.254/16, 172.16/12, 192.168/16; IPv6 `::`, `::1`, `fc00::/7`, `fe80::/10`, and IPv4 ones
+ * written as IPv6). Told from the address alone: a public name that resolves to a private
+ * address can't be seen from here.
+ *
+ * For anything that follows a link on a person's behalf (a redirect check, a link checker): a hop
+ * from a site on the internet to a local address is where to stop, since a request there can
+ * change something on a router, a printer or a development server.
+ *
+ * @param {string} url - A web address (`new URL` writes "0x7f.1" and "2130706433" as 127.0.0.1).
+ * @returns {boolean} True for a local address; false for the internet, or what isn't an address.
+ * @example
+ * isLocalUrl('http://192.168.1.1/admin'); // true
+ * isLocalUrl('https://example.com/'); // false
+ */
+export function isLocalUrl(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+  } catch {
+    return false;
+  }
+  if (!host) return false;
+  if (host.startsWith('[')) {
+    const address = host.slice(1, -1);
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(address);
+    if (mapped) {
+      const [high, low] = [parseInt(mapped[1], 16), parseInt(mapped[2], 16)];
+      return isLocalUrl(`http://${high >> 8}.${high & 255}.${low >> 8}.${low & 255}/`);
+    }
+    return address === '::' || address === '::1' || /^f[cd][0-9a-f]{2}:/.test(address) || /^fe[89ab][0-9a-f]:/.test(address);
+  }
+  const ipv4 = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(host);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  }
+  return host === 'localhost' || !host.includes('.') || /\.(?:localhost|local|internal|lan|home\.arpa)$/.test(host);
 }

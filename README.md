@@ -234,10 +234,19 @@ hostPatterns('github.com');                  // ['*://github.com/*', '*://*.gith
 originPattern('https://bit.ly/x');           // 'https://bit.ly/*' (permissions.request)
 siteLabel('https://example.com');            // 'example.com', as a list shows it
 withSite(['a.com', 'b.com'], 'a.com');       // ['b.com', 'a.com'], what a list keeps after Add (also withoutSite, withSiteReplaced)
+isWebUrl('mailto:a@example.com');            // false: only http and https are web pages
+isLocalUrl('http://192.168.1.1/admin');      // true: this computer or its network, not the internet
 ```
 
 A site is http or https with a dot in its host (or `localhost`); text without a scheme is https;
 `localhost:8080` is a host and port. Pure, so a content script can load `sites/sites.js` alone.
+
+`isLocalUrl` is for anything that follows links on a person's behalf (a redirect check, a link
+checker): `localhost` and names under it, a name without a dot, `.local`, `.lan`, `.internal`
+and `.home.arpa` names, and the loopback, private and link-local address ranges (IPv4 and IPv6,
+however written: `0x7f.1`, `2130706433`, `[::ffff:192.168.0.1]`). A hop from a site on the
+internet to one of these is where to stop: a request there can change something. It is told from
+the address alone; a public name that resolves to a private address can't be seen from here.
 
 ## A page's side
 

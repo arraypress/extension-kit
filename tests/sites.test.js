@@ -10,11 +10,30 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import {
-  MAX_HOST_LENGTH, createSiteList, hostPatterns, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite,
+  MAX_HOST_LENGTH, createSiteList, hostPatterns, isLocalUrl, isWebUrl, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite,
   withSiteReplaced, withoutSite,
 } from '../src/index.js';
 
 describe('sites', () => {
+  it('isWebUrl: http and https only', () => {
+    assert.equal(isWebUrl('http://a.com/'), true);
+    assert.equal(isWebUrl('https://a.com/'), true);
+    assert.equal(['mailto:a@b.com', 'javascript:void 0', 'chrome://extensions', 'file:///etc/hosts', 'nonsense', ''].some(isWebUrl), false);
+  });
+
+  it('isLocalUrl: this computer and its network, however the address is written; the internet isn’t', () => {
+    for (const url of [
+      'http://localhost/', 'http://app.localhost:3000/', 'http://127.0.0.1:8080/', 'http://0x7f.1/', 'http://2130706433/', 'http://10.1.2.3/',
+      'http://172.16.0.1/', 'http://172.31.255.255/', 'http://192.168.1.1/admin', 'http://169.254.169.254/latest/meta-data', 'http://100.64.0.1/',
+      'http://0.0.0.0/', 'http://[::1]/', 'http://[::]/', 'http://[fd12::1]/', 'http://[fe80::1]/', 'http://[::ffff:192.168.0.1]/',
+      'http://router/', 'http://printer.local/', 'http://nas.lan/', 'http://db.internal/', 'http://host.home.arpa/', 'http://localhost./',
+    ]) assert.equal(isLocalUrl(url), true, url);
+    for (const url of [
+      'https://example.com/', 'http://8.8.8.8/', 'http://172.32.0.1/', 'http://100.128.0.1/', 'http://192.169.1.1/', 'http://[2606:4700::1111]/',
+      'http://[::ffff:8.8.8.8]/', 'https://local.example.com/', 'https://internal.example/', 'mailto:a@b.com', 'nonsense',
+    ]) assert.equal(isLocalUrl(url), false, url);
+  });
+
   it('a list with a site added (at the end, once), taken out, or edited in place (merged with a duplicate)', () => {
     const sites = Object.freeze(['a.com', 'b.com', 'c.com']);
     assert.deepEqual(withSite(sites, 'd.com'), ['a.com', 'b.com', 'c.com', 'd.com']);

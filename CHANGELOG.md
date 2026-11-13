@@ -5,7 +5,13 @@ All notable changes to `@arraypress/extension-kit` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.11.1] — unreleased
+## [1.12.0] — unreleased
+
+### Added
+
+- **`isLocalUrl(url)`** and **`isWebUrl(url)`** (`sites/sites.js`): whether an address is on this computer or its own network rather than the internet (`localhost`, dotless names, `.local`, `.lan`, `.internal`, `.localhost`, `.home.arpa`, and the loopback, private and link-local ranges of IPv4 and IPv6, however the address is written), and whether it is http(s) at all. Moved from Clean Links (`shared/sites.js`), where the redirect check stops at a hop from the internet into the person's network; Better Bookmarks' link checker needs the same guard, and a guard is not something to keep two copies of.
+
+## [1.11.1] — 2026-11-12
 
 ### Fixed
 

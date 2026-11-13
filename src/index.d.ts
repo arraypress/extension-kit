@@ -40,7 +40,7 @@ export { callInTab, isBrowserPage } from './scripting/tab.js';
 export { createSettingsSaver } from './settings/saver.js';
 export { MAX_SYNC_ITEM_BYTES, syncItemBytes } from './settings/storage.js';
 export { createSettingsStore } from './settings/store.js';
-export { MAX_HOST_LENGTH, hostPatterns, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite, withSiteReplaced, withoutSite, } from './sites/sites.js';
+export { MAX_HOST_LENGTH, hostPatterns, isLocalUrl, isWebUrl, onSite, originPattern, siteHost, siteLabel, siteOrigin, withSite, withSiteReplaced, withoutSite, } from './sites/sites.js';
 export { eachLimited } from './time/pool.js';
 export { within } from './time/time.js';
 export { POLL_MS, watchSchemeOffscreen } from './toolbar/offscreen.js';
